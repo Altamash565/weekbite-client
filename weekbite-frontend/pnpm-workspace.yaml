@@ -1,0 +1,6 @@
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - react-resizable-panels@4.12.1
+  - shadcn@4.13.0
