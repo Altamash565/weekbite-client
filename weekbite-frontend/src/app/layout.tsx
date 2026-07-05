@@ -1,3 +1,4 @@
+import "./globals.css";
 import { Toaster } from "sonner";
 
 export default function RootLayout({
@@ -8,7 +9,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head />
-      <body>
+      <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
         <Toaster />
       </body>
