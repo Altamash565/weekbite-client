@@ -1,159 +1,83 @@
-# Turborepo starter
+# WeekBite Client Monorepo
 
-This Turborepo starter is maintained by the Turborepo core team.
+Welcome to the **WeekBite** client repository. WeekBite is a calm weekly meal compass built with **React Native (Expo)**, **Next.js**, and **Turborepo**.
 
-## Using this example
+---
 
-Run the following command:
+## Workspace Architecture
 
-```sh
-npx create-turbo@latest
+```text
+weekbite-client/
+├── apps/
+│   ├── mobile/             # React Native Expo app (iOS & Android)
+│   ├── web/                # Next.js web application
+│   └── docs/               # Documentation application
+├── packages/
+│   ├── ui/                 # Shared UI component primitives
+│   ├── eslint-config/      # Shared ESLint configurations
+│   └── typescript-config/  # Shared tsconfig bases
+├── AGENTS.md               # Monorepo-wide AI agent instructions
+├── PRODUCT.md              # Brand identity, personas & design principles
+├── turbo.json              # Turborepo task pipeline configuration
+└── pnpm-workspace.yaml     # pnpm workspace definition
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## Prerequisites
 
-### Apps and Packages
+- **Node.js**: `v20.x` or later (Node 24 recommended)
+- **Package Manager**: [`pnpm`](https://pnpm.io/) (v9 or later)
+- **Expo Go** / Android Studio / Xcode (for running `apps/mobile`)
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+---
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+## Getting Started
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+### 1. Install Dependencies
+Install all workspace dependencies from the root directory:
+```bash
+pnpm install
 ```
 
-Without global `turbo`, use your package manager:
+### 2. Development
 
-```sh
-cd my-turborepo
-npx turbo build
-pnpm exec turbo build
-pnpm exec turbo build
+#### Run all apps in parallel:
+```bash
+pnpm dev
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+#### Run only the Mobile app (Expo):
+```bash
+pnpm --filter mobile start
 ```
+- Press `a` in terminal to run on an Android emulator/device.
+- Press `i` to run on an iOS simulator.
+- Press `w` to run in the web browser.
+- Scan the QR code using the **Expo Go** app on your physical device.
 
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+#### Run only the Web app (Next.js):
+```bash
+pnpm --filter web dev
 ```
+Open [http://localhost:3000](http://localhost:3000) to view the web client.
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
+## Quality Checks & Commands
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+| Task | Command | Description |
+| :--- | :--- | :--- |
+| **Build** | `pnpm build` | Compiles all packages and applications |
+| **Lint** | `pnpm lint` | Runs ESLint across all workspaces |
+| **Type Check** | `pnpm check-types` | Validates TypeScript in parallel without emitting files |
+| **Format** | `pnpm format` | Formats TypeScript, TSX, and Markdown files with Prettier |
 
-```sh
-cd my-turborepo
-turbo dev
-```
+---
 
-Without global `turbo`, use your package manager:
+## Documentation Links
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- **Product Compass**: Read [`PRODUCT.md`](PRODUCT.md) for brand tone, target audience, and anti-references.
+- **Mobile Guidelines**: Read [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md) for React Native constraints.
+- **Mobile Design System**: Read [`apps/mobile/DESIGN.md`](apps/mobile/DESIGN.md) for exact color tokens, typography, and component specs.
+- **Mobile Folder Architecture**: Read [`apps/mobile/ARCHITECTURE.md`](apps/mobile/ARCHITECTURE.md) for Feature-Driven structure rules.
