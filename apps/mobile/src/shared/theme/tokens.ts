@@ -43,41 +43,48 @@ export const radii = {
   pill: 9999,
 } as const;
 
+export const fonts = {
+  regular: 'Lexend_400Regular',
+  medium: 'Lexend_500Medium',
+  semiBold: 'Lexend_600SemiBold',
+  bold: 'Lexend_700Bold',
+} as const;
+
 export const typography = {
-  fontFamily: 'Lexend',
+  fontFamily: fonts.regular,
   title: {
+    fontFamily: fonts.bold,
     fontSize: 28,
-    fontWeight: '600' as const,
-    lineHeight: 35,
+    lineHeight: 36,
     letterSpacing: -0.56,
   },
   section: {
+    fontFamily: fonts.medium,
     fontSize: 20,
-    fontWeight: '500' as const,
     lineHeight: 27,
     letterSpacing: -0.2,
   },
   body: {
+    fontFamily: fonts.regular,
     fontSize: 14,
-    fontWeight: '400' as const,
     lineHeight: 21,
     letterSpacing: 0,
   },
   bodyMedium: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500' as const,
     lineHeight: 20,
     letterSpacing: 0,
   },
   button: {
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: '500' as const,
-    lineHeight: 14,
+    lineHeight: 18,
     letterSpacing: 0.14,
   },
   caption: {
+    fontFamily: fonts.regular,
     fontSize: 12,
-    fontWeight: '400' as const,
     lineHeight: 17,
     letterSpacing: 0.12,
   },

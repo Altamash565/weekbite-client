@@ -1,66 +1,50 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  Lexend_400Regular,
+  Lexend_500Medium,
+  Lexend_600SemiBold,
+  Lexend_700Bold,
+} from '@expo-google-fonts/lexend';
+import { AuthNavigator } from './src/features/auth';
+import { colors } from './src/shared/theme/tokens';
 
 export default function App() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.badge}>WEEKLY MEAL COMPASS</Text>
-        <Text style={styles.title}>WeekBite</Text>
-        <Text style={styles.subtitle}>
-          Plan calmly, cook mindfully, and keep your week organized.
-        </Text>
+  const [fontsLoaded] = useFonts({
+    Lexend_400Regular,
+    Lexend_500Medium,
+    Lexend_600SemiBold,
+    Lexend_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color={colors.primaryDark} />
       </View>
-      <StatusBar style="dark" />
-    </View>
+    );
+  }
+
+  return (
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <AuthNavigator />
+      </View>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: '#E7E5E4',
-    shadowColor: '#1C1917',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-    alignItems: 'center',
-  },
-  badge: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: '#436B42',
-    backgroundColor: '#EDF4EC',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1C1917',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#78716C',
-    textAlign: 'center',
   },
 });
-
