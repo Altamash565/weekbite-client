@@ -1,6 +1,5 @@
 /**
  * WeekBite Design Tokens — Calm Culinary Minimal
- * Generated from apps/mobile/DESIGN.md
  */
 
 export const colors = {
