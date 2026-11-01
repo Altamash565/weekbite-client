@@ -27,10 +27,16 @@ module.exports = {
         success: '#1F8A1F',
       },
       fontFamily: {
+        sans: ['PlusJakartaSans_400Regular'],
         regular: ['PlusJakartaSans_400Regular'],
         medium: ['PlusJakartaSans_500Medium'],
         semibold: ['PlusJakartaSans_600SemiBold'],
         bold: ['PlusJakartaSans_700Bold'],
+        jakarta: ['PlusJakartaSans_400Regular'],
+        'jakarta-regular': ['PlusJakartaSans_400Regular'],
+        'jakarta-medium': ['PlusJakartaSans_500Medium'],
+        'jakarta-semibold': ['PlusJakartaSans_600SemiBold'],
+        'jakarta-bold': ['PlusJakartaSans_700Bold'],
       },
       borderRadius: {
         xl: '12px',
