@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
@@ -8,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, fonts, radii, layout, typography } from '../../../shared/theme/tokens';
+import { colors } from '../../../shared/theme/tokens';
 
 interface AuthInputProps extends TextInputProps {
   label: string;
@@ -22,36 +21,94 @@ export const AuthInput: React.FC<AuthInputProps> = ({
   isPassword = false,
   helperText,
   error,
-  style,
+  className = '',
+  autoCapitalize,
+  autoCorrect = false,
+  autoComplete,
+  textContentType,
+  keyboardType,
+  importantForAutofill,
   ...props
 }) => {
   const [showPassword, setShowPassword] = useState(!isPassword);
   const [isFocused, setIsFocused] = useState(false);
 
+  // Compute unambiguous autofill hints so OS Autofill does not populate other fields
+  let resolvedAutoComplete = autoComplete;
+  let resolvedTextContentType = textContentType;
+  let resolvedAutoCapitalize = autoCapitalize;
+  let resolvedImportantForAutofill = importantForAutofill;
+
+  if (!resolvedAutoComplete) {
+    if (isPassword) {
+      resolvedAutoComplete = 'password';
+    } else if (keyboardType === 'email-address') {
+      resolvedAutoComplete = 'email';
+    } else if (keyboardType === 'number-pad') {
+      resolvedAutoComplete = 'one-time-code';
+    }
+  }
+
+  if (!resolvedTextContentType) {
+    if (isPassword) {
+      resolvedTextContentType = 'password';
+    } else if (keyboardType === 'email-address') {
+      resolvedTextContentType = 'emailAddress';
+    } else if (keyboardType === 'number-pad') {
+      resolvedTextContentType = 'oneTimeCode';
+    }
+  }
+
+  if (resolvedAutoCapitalize === undefined) {
+    resolvedAutoCapitalize = isPassword || keyboardType === 'email-address' || keyboardType === 'number-pad'
+      ? 'none'
+      : 'words';
+  }
+
+  // Guard against Android Autofill filling credentials into Name or Code fields
+  if (!resolvedImportantForAutofill) {
+    if (resolvedAutoComplete === 'name' || label.toLowerCase().includes('name')) {
+      resolvedImportantForAutofill = 'no';
+    } else if (resolvedAutoComplete === 'one-time-code' || keyboardType === 'number-pad') {
+      resolvedImportantForAutofill = 'no';
+    } else if (resolvedAutoComplete === 'email' || isPassword) {
+      resolvedImportantForAutofill = 'yes';
+    }
+  }
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+    <View className="mb-5 w-full">
+      <Text className="font-medium text-sm text-text-primary mb-2">
+        {label}
+      </Text>
       <View
-        style={[
-          styles.inputContainer,
-          isFocused && styles.inputFocused,
-          Boolean(error) && styles.inputError,
-        ]}
+        className={`flex-row items-center bg-surface h-[52px] rounded-xl border px-4 ${
+          error
+            ? 'border-error'
+            : isFocused
+            ? 'border-primary-dark'
+            : 'border-border'
+        }`}
       >
         <TextInput
-          style={[styles.input, style]}
+          className={`flex-1 h-full font-regular text-[15px] text-text-primary ${className}`}
           placeholderTextColor={colors.textSecondary}
           secureTextEntry={isPassword && !showPassword}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          autoCapitalize="none"
+          autoCapitalize={resolvedAutoCapitalize}
+          autoCorrect={autoCorrect}
+          autoComplete={resolvedAutoComplete}
+          textContentType={resolvedTextContentType}
+          keyboardType={keyboardType}
+          importantForAutofill={resolvedImportantForAutofill}
           {...props}
         />
         {isPassword && (
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setShowPassword((prev) => !prev)}
-            style={styles.eyeButton}
+            className="ml-2 p-1"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
           >
@@ -64,62 +121,10 @@ export const AuthInput: React.FC<AuthInputProps> = ({
         )}
       </View>
       {Boolean(error) ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text className="font-regular text-xs text-error mt-1.5">{error}</Text>
       ) : Boolean(helperText) ? (
-        <Text style={styles.helperText}>{helperText}</Text>
+        <Text className="font-regular text-xs text-text-secondary mt-1.5">{helperText}</Text>
       ) : null}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 20,
-    width: '100%',
-  },
-  label: {
-    fontFamily: fonts.medium,
-    fontSize: typography.bodyMedium.fontSize,
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    height: 52,
-    borderRadius: radii.input,
-    borderWidth: layout.borderWidth,
-    borderColor: colors.border,
-    paddingHorizontal: 16,
-  },
-  inputFocused: {
-    borderColor: colors.primaryDark,
-  },
-  inputError: {
-    borderColor: colors.error,
-  },
-  input: {
-    flex: 1,
-    height: '100%',
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  eyeButton: {
-    marginLeft: 8,
-    padding: 4,
-  },
-  helperText: {
-    fontFamily: fonts.regular,
-    fontSize: typography.caption.fontSize,
-    color: colors.textSecondary,
-    marginTop: 6,
-  },
-  errorText: {
-    fontFamily: fonts.regular,
-    fontSize: typography.caption.fontSize,
-    color: colors.error,
-    marginTop: 6,
-  },
-});

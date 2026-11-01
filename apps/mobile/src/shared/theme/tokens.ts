@@ -43,10 +43,10 @@ export const radii = {
 } as const;
 
 export const fonts = {
-  regular: 'Lexend_400Regular',
-  medium: 'Lexend_500Medium',
-  semiBold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
+  regular: 'PlusJakartaSans_400Regular',
+  medium: 'PlusJakartaSans_500Medium',
+  semiBold: 'PlusJakartaSans_600SemiBold',
+  bold: 'PlusJakartaSans_700Bold',
 } as const;
 
 export const typography = {

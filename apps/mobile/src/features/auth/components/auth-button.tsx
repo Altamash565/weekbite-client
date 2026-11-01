@@ -1,12 +1,11 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  StyleSheet,
   Text,
   TouchableOpacity,
   TouchableOpacityProps,
 } from 'react-native';
-import { colors, fonts, radii, layout, typography } from '../../../shared/theme/tokens';
+import { colors } from '../../../shared/theme/tokens';
 
 interface AuthButtonProps extends TouchableOpacityProps {
   title: string;
@@ -19,7 +18,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
   variant = 'primary',
   loading = false,
   disabled,
-  style,
+  className = '',
   ...props
 }) => {
   const isPrimary = variant === 'primary';
@@ -29,54 +28,22 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
     <TouchableOpacity
       activeOpacity={0.8}
       disabled={isDisabled}
-      style={[
-        styles.base,
-        isPrimary ? styles.primary : styles.secondary,
-        isDisabled && styles.disabled,
-        style,
-      ]}
+      className={`h-[52px] w-full rounded-xl items-center justify-center px-5 ${
+        isPrimary ? 'bg-primary' : 'bg-surface border border-border'
+      } ${isDisabled ? 'opacity-50' : ''} ${className}`}
       {...props}
     >
       {loading ? (
         <ActivityIndicator color={isPrimary ? colors.onPrimary : colors.primaryDark} />
       ) : (
-        <Text style={[styles.text, isPrimary ? styles.primaryText : styles.secondaryText]}>
+        <Text
+          className={`font-semibold text-sm tracking-wide ${
+            isPrimary ? 'text-on-primary' : 'text-primary-dark'
+          }`}
+        >
           {title}
         </Text>
       )}
     </TouchableOpacity>
   );
 };
-
-const styles = StyleSheet.create({
-  base: {
-    height: 52,
-    borderRadius: radii.button,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    width: '100%',
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.surface,
-    borderWidth: layout.borderWidth,
-    borderColor: colors.border,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  text: {
-    fontFamily: fonts.semiBold,
-    fontSize: typography.bodyMedium.fontSize,
-    letterSpacing: 0.1,
-  },
-  primaryText: {
-    color: colors.onPrimary, // #0F2A0F
-  },
-  secondaryText: {
-    color: colors.primaryDark, // #1F8A1F
-  },
-});

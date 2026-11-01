@@ -1,25 +1,20 @@
 import React, { useState } from 'react';
-import { WelcomeScreen } from './welcome-screen';
-import { AuthFormScreen } from './auth-form-screen';
+import { SignInScreen } from './sign-in-screen';
+import { SignUpScreen } from './sign-up-screen';
 
-type AuthStep = 'welcome' | 'signin' | 'signup';
+type AuthViewMode = 'sign-in' | 'sign-up';
 
-export const AuthNavigator: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState<AuthStep>('welcome');
+interface AuthNavigatorProps {
+  initialMode?: AuthViewMode;
+}
 
-  if (currentStep === 'welcome') {
-    return (
-      <WelcomeScreen
-        onNavigateToSignIn={() => setCurrentStep('signin')}
-        onNavigateToSignUp={() => setCurrentStep('signup')}
-      />
-    );
+export const AuthNavigator: React.FC<AuthNavigatorProps> = ({ initialMode = 'sign-in' }) => {
+  const [mode, setMode] = useState<AuthViewMode>(initialMode);
+
+  if (mode === 'sign-up') {
+    return <SignUpScreen onNavigateToSignIn={() => setMode('sign-in')} />;
   }
 
-  return (
-    <AuthFormScreen
-      initialMode={currentStep}
-      onBack={() => setCurrentStep('welcome')}
-    />
-  );
+  return <SignInScreen onNavigateToSignUp={() => setMode('sign-up')} />;
 };
+

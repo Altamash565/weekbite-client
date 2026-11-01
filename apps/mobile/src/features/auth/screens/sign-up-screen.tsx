@@ -1,211 +1,202 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton } from '../components/back-button';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthInput } from '../components/auth-input';
 import { AuthButton } from '../components/auth-button';
-import { colors, fonts, spacing, typography } from '../../../shared/theme/tokens';
+import { useRegister } from '../hooks/useAuth';
+import { colors } from '../../../shared/theme/tokens';
+
+const signUpSchema = z.object({
+  fullName: z.string().min(1, 'Please enter your full name'),
+  email: z
+    .string()
+    .min(1, 'Please enter your email address')
+    .email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+type SignUpFormValues = z.infer<typeof signUpSchema>;
 
 interface SignUpScreenProps {
-  onBack: () => void;
   onNavigateToSignIn: () => void;
 }
 
-export const SignUpScreen: React.FC<SignUpScreenProps> = ({
-  onBack,
-  onNavigateToSignIn,
-}) => {
-  const [name, setName] = useState('Alex Morgan');
-  const [email, setEmail] = useState('alex.morgan@email.com');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+export const SignUpScreen: React.FC<SignUpScreenProps> = ({ onNavigateToSignIn }) => {
+  const insets = useSafeAreaInsets();
+  const registerMutation = useRegister();
 
-  const validate = () => {
-    const errs: { name?: string; email?: string; password?: string } = {};
-    if (!name.trim()) {
-      errs.name = 'Please enter your name';
-    }
-    if (!email.trim()) {
-      errs.email = 'Please enter your email';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      errs.email = 'Please enter a valid email address';
-    }
-    if (!password) {
-      errs.password = 'Please enter a password';
-    } else if (password.length < 8) {
-      errs.password = 'Use at least 8 characters.';
-    }
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SignUpFormValues>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: {
+      fullName: '',
+      email: '',
+      password: '',
+    },
+  });
 
-  const handleSignUp = async () => {
-    if (!validate()) return;
-    setLoading(true);
-    // Simulate sign up
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Account Created', `Welcome to WeekBite, ${name}!`);
-    }, 1000);
-  };
+    const onRegister = (values: SignUpFormValues) => {
+      registerMutation.mutate(
+        {
+          name: values.fullName.trim(),
+          email: values.email.trim(),
+          password: values.password,
+        },
+        {
+          onError: (error) => {
+            Alert.alert('Registration Failed', error.message || 'Could not create account');
+          },
+        }
+      );
+    };
 
-  return (
-    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    const isBusy = registerMutation.isPending;
+    const authError = registerMutation.error ? registerMutation.error.message : null;
+
+    return (
+      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+        <StatusBar style="dark" />
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1"
         >
-          {/* Top Bar with Back Button */}
-          <View style={styles.topBar}>
-            <BackButton onPress={onBack} />
-          </View>
-
-          {/* Heading */}
-          <View style={styles.header}>
-            <Text style={styles.title}>
-              Make room for a{'\n'}simpler week
-            </Text>
-            <Text style={styles.subtitle}>
-              A few details, then you’re ready to plan.
-            </Text>
-          </View>
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{
+              flexGrow: 1,
+              paddingHorizontal: 20,
+              paddingTop: 28,
+              paddingBottom: Math.max(insets.bottom + 16, 32),
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header */}
+                <View className="items-center mb-8">
+                  <View className="w-[56px] h-[56px] rounded-3xl bg-primary-tint items-center justify-center mb-4">
+                    <Ionicons name="restaurant-outline" size={28} color={colors.primaryDark} />
+                  </View>
+                  <Text className="font-bold text-2xl text-text-primary tracking-tight mb-2">
+                    Create an account
+                  </Text>
+                  <Text className="font-regular text-sm text-text-secondary text-center leading-5 max-w-[290px]">
+                    Plan your meals and take a simpler grocery list with you.
+                  </Text>
+                </View>
 
           {/* Form */}
-          <View style={styles.form}>
-            <AuthInput
-              label="Name"
-              placeholder="Alex Morgan"
-              value={name}
-              onChangeText={(text) => {
-                setName(text);
-                if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
-              }}
-              error={errors.name}
+                    <View className="w-full">
+                      <Controller
+                        control={control}
+                        name="fullName"
+                        render={({ field: { onChange, onBlur, value } }) => (
+                          <AuthInput
+                            label="Full name"
+                            placeholder="John Doe"
+                            value={value}
+                            onChangeText={onChange}
+                            onBlur={onBlur}
+                            autoComplete="name"
+                            textContentType="name"
+                            autoCapitalize="words"
+                            importantForAutofill="no"
+                            error={errors.fullName?.message}
+                            editable={!isBusy}
+                          />
+                        )}
+                      />
+
+            <Controller
+                          control={control}
+                          name="email"
+                          render={({ field: { onChange, onBlur, value } }) => (
+                            <AuthInput
+                              label="Email address"
+                              placeholder="johndoe@example.com"
+                              value={value}
+                              onChangeText={onChange}
+                              onBlur={onBlur}
+                              keyboardType="email-address"
+                              autoComplete="email"
+                              textContentType="emailAddress"
+                              autoCapitalize="none"
+                              importantForAutofill="yes"
+                              error={errors.email?.message}
+                              editable={!isBusy}
+                            />
+              )}
             />
 
-            <AuthInput
-              label="Email"
-              placeholder="alex.morgan@email.com"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-              }}
-              keyboardType="email-address"
-              error={errors.email}
-            />
+            <Controller
+                          control={control}
+                          name="password"
+                          render={({ field: { onChange, onBlur, value } }) => (
+                            <AuthInput
+                              label="Password"
+                              placeholder="At least 6 characters"
+                              value={value}
+                              onChangeText={onChange}
+                              onBlur={onBlur}
+                              isPassword
+                              autoComplete={Platform.select({ android: 'password-new', default: 'new-password' })}
+                              textContentType="newPassword"
+                              autoCapitalize="none"
+                              importantForAutofill="yes"
+                              error={errors.password?.message}
+                              editable={!isBusy}
+                            />
+                          )}
+                        />
 
-            <AuthInput
-              label="Password"
-              placeholder="Create a password"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
-              }}
-              isPassword
-              helperText="Use at least 8 characters."
-              error={errors.password}
-            />
+                        {Boolean(authError) && (
+                          <Text className="font-regular text-xs text-error bg-error-tint p-3 rounded-xl mb-4 text-center">
+                            {authError}
+                          </Text>
+                        )}
 
-            <AuthButton
-              title="Create account"
-              variant="primary"
-              onPress={handleSignUp}
-              loading={loading}
-              style={styles.submitButton}
-            />
+                        <AuthButton
+                          title="Create account"
+                          variant="primary"
+                          onPress={() => handleSubmit(onRegister)()}
+                          loading={isBusy}
+                          disabled={isBusy}
+                          className="mt-2 mb-5"
+                        />
+                      </View>
+
+                {/* Navigation to Sign In */}
+                <View className="mt-auto items-center py-4">
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={onNavigateToSignIn}
+                    disabled={isBusy}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Text className="font-regular text-sm text-text-secondary">
+                      Already have an account?{' '}
+                      <Text className="font-semibold text-primary-dark">Sign in</Text>
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
           </View>
-
-          {/* Bottom Switch Link */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={onNavigateToSignIn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.footerLink}>
-                Already have an account?{' '}
-                <Text style={styles.highlightLink}>Sign in</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+          );
 };
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.screenMargin,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  topBar: {
-    marginBottom: 28,
-  },
-  header: {
-    marginBottom: 32,
-  },
-  title: {
-    fontFamily: fonts.bold,
-    fontSize: 32,
-    color: colors.textPrimary,
-    letterSpacing: -0.5,
-    lineHeight: 40,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontFamily: fonts.regular,
-    fontSize: typography.body.fontSize,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  form: {
-    width: '100%',
-  },
-  submitButton: {
-    marginTop: 8,
-    marginBottom: 28,
-  },
-  footer: {
-    marginTop: 'auto',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  footerLink: {
-    fontFamily: fonts.regular,
-    fontSize: 14.5,
-    color: colors.primaryDark,
-  },
-  highlightLink: {
-    fontFamily: fonts.semiBold,
-    color: colors.primaryDark,
-  },
-});
