@@ -10,11 +10,15 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { RecipeDetailModal } from '../components/recipe-detail-modal';
+import { RecipeDetailScreen } from './recipe-detail-screen';
 import { useFavorites, useToggleFavorite } from '../hooks/useRecipes';
 import { colors, fonts } from '../../../shared/theme/tokens';
 
-export const FavouritesScreen: React.FC = () => {
+interface FavouritesScreenProps {
+  onSelectRecipe?: (recipeId: string) => void;
+}
+
+export const FavouritesScreen: React.FC<FavouritesScreenProps> = ({ onSelectRecipe }) => {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
@@ -104,7 +108,7 @@ export const FavouritesScreen: React.FC = () => {
               <TouchableOpacity
                 key={fav.id}
                 activeOpacity={0.8}
-                onPress={() => setSelectedRecipeId(fav.recipeId)}
+                onPress={() => onSelectRecipe ? onSelectRecipe(fav.recipeId) : setSelectedRecipeId(fav.recipeId)}
                 className="bg-surface rounded-xl border border-border p-4 mb-3 flex-row items-center justify-between"
               >
                 <View className="flex-1 pr-3">
@@ -150,13 +154,13 @@ export const FavouritesScreen: React.FC = () => {
       </ScrollView>
       )}
 
-      {/* Recipe Detail Modal */}
-      <RecipeDetailModal
-        recipeId={selectedRecipeId}
-        isFavorited={true}
-        onClose={() => setSelectedRecipeId(null)}
-        onToggleFavorite={handleToggleFavorite}
-      />
+      {/* Fallback inline recipe screen if not handled by root navigator */}
+      {!onSelectRecipe && selectedRecipeId && (
+        <RecipeDetailScreen
+          recipeId={selectedRecipeId}
+          onBack={() => setSelectedRecipeId(null)}
+        />
+      )}
     </View>
   );
 };

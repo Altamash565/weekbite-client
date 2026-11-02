@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { RecipeCard } from '../components/recipe-card';
-import { RecipeDetailModal } from '../components/recipe-detail-modal';
+import { RecipeDetailScreen } from './recipe-detail-screen';
 import { CreateRecipeModal } from '../components/create-recipe-modal';
 import { LayoutModeToggle } from '../components/layout-mode-toggle';
 import { ChefIllustration } from '../components/chef-illustration';
@@ -30,9 +30,13 @@ const EMPTY_STATE_TOP_OFFSET = Math.max(32, Math.round((WINDOW_HEIGHT - 220 - 24
 
 interface RecipesScreenProps {
   onNavigateToCreate?: () => void;
+  onSelectRecipe?: (recipeId: string) => void;
 }
 
-export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate }) => {
+export const RecipesScreen: React.FC<RecipesScreenProps> = ({
+  onNavigateToCreate,
+  onSelectRecipe,
+}) => {
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardVisible();
   const searchInputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
@@ -41,8 +45,16 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('grid');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Modal States
+  // Selected recipe state
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+
+  const handleSelectRecipe = (id: string) => {
+    if (onSelectRecipe) {
+      onSelectRecipe(id);
+    } else {
+      setSelectedRecipeId(id);
+    }
+  };
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // User Authentication Context
@@ -239,7 +251,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
                   recipe={item}
                   layout="grid"
                   isFavorited={favoriteIds.has(item.id)}
-                  onPress={() => setSelectedRecipeId(item.id)}
+                  onPress={() => handleSelectRecipe(item.id)}
                   onToggleFavorite={handleToggleFavorite}
                 />
               ))}
@@ -255,7 +267,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
               recipe={item}
               layout="list"
               isFavorited={favoriteIds.has(item.id)}
-              onPress={() => setSelectedRecipeId(item.id)}
+              onPress={() => handleSelectRecipe(item.id)}
               onToggleFavorite={handleToggleFavorite}
             />
           ))
@@ -281,13 +293,13 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
         </TouchableOpacity>
       )}
 
-      {/* Recipe Detail Modal */}
-      <RecipeDetailModal
-        recipeId={selectedRecipeId}
-        isFavorited={selectedRecipeId ? favoriteIds.has(selectedRecipeId) : false}
-        onClose={() => setSelectedRecipeId(null)}
-        onToggleFavorite={handleToggleFavorite}
-      />
+      {/* Inline Recipe Detail Screen fallback if not handled by root navigator */}
+      {!onSelectRecipe && selectedRecipeId && (
+        <RecipeDetailScreen
+          recipeId={selectedRecipeId}
+          onBack={() => setSelectedRecipeId(null)}
+        />
+      )}
 
       {/* Create Recipe Modal */}
       <CreateRecipeModal
