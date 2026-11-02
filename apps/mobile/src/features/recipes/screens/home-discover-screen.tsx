@@ -14,8 +14,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFavorites, useRecipes, useToggleFavorite } from '../hooks/useRecipes';
 import { Recipe, RecipeCategory } from '../types/recipes.types';
+import { RecipeDetailModal } from '../components/recipe-detail-modal';
+import { ChefIllustration } from '../components/chef-illustration';
 import { useCurrentUser } from '../../auth';
-import { colors } from '../../../shared/theme/tokens';
+import { colors, fonts } from '../../../shared/theme/tokens';
 
 const CATEGORIES: Array<{ key: string; label: string; value?: RecipeCategory }> = [
   { key: 'ALL', label: 'All' },
@@ -28,8 +30,9 @@ const CATEGORIES: Array<{ key: string; label: string; value?: RecipeCategory }> 
 
 export const HomeDiscoverScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { data: user } = useCurrentUser();
+  const { data: user, isLoading: isUserLoading } = useCurrentUser();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -46,7 +49,7 @@ export const HomeDiscoverScreen: React.FC = () => {
   } = useRecipes({
     search: search.trim() || undefined,
     category: activeCategoryValue,
-    limit: 20,
+    limit: 50,
   });
 
   const { data: favorites = [], refetch: refetchFavorites } = useFavorites();
@@ -56,7 +59,24 @@ export const HomeDiscoverScreen: React.FC = () => {
     return new Set(favorites.map((f) => f.recipeId));
   }, [favorites]);
 
-  const recipes = recipesData?.recipes || [];
+  const currentUserId = user?.id || user?._id;
+
+  // Only display recipes created by the current authenticated user
+  const recipes = useMemo(() => {
+    const all = recipesData?.recipes || [];
+    if (!currentUserId) return [];
+    return all.filter(
+      (recipe) =>
+        recipe.createdById === currentUserId ||
+        recipe.createdBy?.id === currentUserId ||
+        Boolean(
+          user?.email &&
+          recipe.createdBy?.email &&
+          recipe.createdBy.email.toLowerCase() === user.email.toLowerCase()
+        )
+    );
+  }, [recipesData?.recipes, currentUserId, user?.email]);
+
   const featuredRecipe = recipes.length > 0 ? recipes[0] : null;
   const otherRecipes = recipes.length > 1 ? recipes.slice(1) : [];
 
@@ -156,26 +176,30 @@ export const HomeDiscoverScreen: React.FC = () => {
       </View>
 
       {/* Main Content Feed */}
-      <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 28 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primaryDark}
-          />
-        }
-      >
-        {isLoading && !refreshing ? (
-          <View className="py-16 items-center justify-center">
-            <ActivityIndicator size="small" color={colors.primaryDark} />
-            <Text className="font-regular text-xs text-text-secondary mt-2">
-              Discovering recipes...
-            </Text>
-          </View>
-        ) : error ? (
+      {(isLoading || (isUserLoading && !user)) && !refreshing ? (
+        <View className="flex-1 items-center justify-center pb-16">
+          <ActivityIndicator size="large" color={colors.primaryDark} />
+          <Text
+            style={{ fontFamily: fonts.medium }}
+            className="text-xs text-text-secondary mt-3"
+          >
+            Discovering your recipes...
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom: 28 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primaryDark}
+            />
+          }
+        >
+          {error ? (
           <View className="py-12 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2">
             <Ionicons name="alert-circle-outline" size={32} color={colors.error || '#D64545'} />
             <Text className="font-semibold text-sm text-text-primary mt-2">
@@ -192,18 +216,31 @@ export const HomeDiscoverScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         ) : recipes.length === 0 ? (
-          <View className="py-16 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2">
-            <View className="w-14 h-14 rounded-2xl bg-primary-tint items-center justify-center mb-3">
-              <Ionicons name="restaurant-outline" size={26} color={colors.primaryDark} />
-            </View>
-            <Text className="font-bold text-base text-text-primary text-center">
-              No recipes found
-            </Text>
-            <Text className="font-regular text-xs text-text-secondary text-center mt-1 max-w-[240px]">
-              {search
-                ? `No results for "${search}". Try searching for something else.`
-                : 'No recipes are in this category yet.'}
-            </Text>
+          <View className="py-16 items-center justify-center px-6">
+            <ChefIllustration size={160} />
+            {search ? (
+              <Text
+                style={{ fontFamily: fonts.medium }}
+                className="text-sm text-text-secondary text-center mt-5"
+              >
+                No recipes matched "{search}"
+              </Text>
+            ) : (
+              <>
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-base text-text-primary text-center mt-5"
+                >
+                  No recipes yet
+                </Text>
+                <Text
+                  style={{ fontFamily: fonts.regular }}
+                  className="text-xs text-text-secondary text-center mt-1"
+                >
+                  Add your first recipe to get started
+                </Text>
+              </>
+            )}
           </View>
         ) : (
           <>
@@ -213,7 +250,11 @@ export const HomeDiscoverScreen: React.FC = () => {
                 <Text className="font-semibold text-xs text-text-secondary uppercase tracking-wider mb-2">
                   Today's Highlight
                 </Text>
-                <View className="bg-surface rounded-2xl border border-border overflow-hidden">
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedRecipeId(featuredRecipe.id)}
+                  className="bg-surface rounded-2xl border border-border overflow-hidden"
+                >
                   {featuredRecipe.image ? (
                     <Image
                       source={{ uri: featuredRecipe.image }}
@@ -280,21 +321,23 @@ export const HomeDiscoverScreen: React.FC = () => {
                       </View>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               </View>
             )}
 
             {/* Discover / All Recipes Section */}
             <View>
               <Text className="font-semibold text-xs text-text-secondary uppercase tracking-wider mb-2">
-                {search ? 'Search Results' : 'Discover More'}
+                {search ? 'Search Results' : 'My Recipes'}
               </Text>
 
               {(search ? recipes : otherRecipes).map((recipe: Recipe) => {
                 const isFav = favoriteIds.has(recipe.id);
                 return (
-                  <View
+                  <TouchableOpacity
                     key={recipe.id}
+                    activeOpacity={0.8}
+                    onPress={() => setSelectedRecipeId(recipe.id)}
                     className="bg-surface rounded-xl border border-border p-3.5 mb-3 flex-row items-center justify-between"
                   >
                     <View className="flex-1 pr-3">
@@ -338,13 +381,22 @@ export const HomeDiscoverScreen: React.FC = () => {
                         color={isFav ? colors.error || '#D64545' : colors.textSecondary}
                       />
                     </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
           </>
         )}
       </ScrollView>
+      )}
+
+      {/* Recipe Detail Modal */}
+      <RecipeDetailModal
+        recipeId={selectedRecipeId}
+        isFavorited={selectedRecipeId ? favoriteIds.has(selectedRecipeId) : false}
+        onClose={() => setSelectedRecipeId(null)}
+        onToggleFavorite={handleToggleFavorite}
+      />
     </View>
   );
 };

@@ -1,6 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -20,8 +22,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, {
+  Easing,
   FadeInDown,
   FadeOutUp,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -95,6 +99,56 @@ interface CreateRecipeScreenProps {
 export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
   const createMutation = useCreateRecipe();
+
+  // Entrance & Exit Transition Animation (Minimal & Real)
+  const translateX = useSharedValue(36);
+  const opacity = useSharedValue(0);
+  const isClosingRef = useRef(false);
+
+  useEffect(() => {
+    translateX.value = withTiming(0, {
+      duration: 250,
+      easing: Easing.out(Easing.cubic),
+    });
+    opacity.value = withTiming(1, {
+      duration: 250,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [opacity, translateX]);
+
+  const handleBack = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    translateX.value = withTiming(36, {
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+    });
+    opacity.value = withTiming(
+      0,
+      {
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) {
+          runOnJS(onBack)();
+        }
+      }
+    );
+  };
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
+  const animatedScreenStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateX: translateX.value }],
+  }));
 
   // Form State
   const [title, setTitle] = useState('');
@@ -385,7 +439,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
       {
         onSuccess: () => {
           Alert.alert('Success', 'Recipe saved successfully!', [
-            { text: 'OK', onPress: onBack },
+            { text: 'OK', onPress: handleBack },
           ]);
         },
         onError: (err) => {
@@ -401,14 +455,17 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
   ).length;
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+    <Animated.View
+      className="flex-1 bg-background"
+      style={[{ paddingTop: insets.top }, animatedScreenStyle]}
+    >
       <StatusBar style="dark" />
 
       {/* Screen Top Bar */}
       <View className="px-5 py-3.5 flex-row items-center border-b border-border bg-surface">
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={onBack}
+          onPress={handleBack}
           hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           className="mr-3 p-1 -ml-1"
         >
@@ -884,15 +941,23 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
             activeOpacity={0.8}
             onPress={handleSubmit}
             disabled={createMutation.isPending}
-            className="w-full h-[52px] rounded-xl bg-primary items-center justify-center flex-row shadow-sm"
+            className={`w-full h-[52px] rounded-xl bg-primary items-center justify-center flex-row shadow-sm ${
+              createMutation.isPending ? 'opacity-85' : ''
+            }`}
           >
-            <Ionicons name="checkmark-circle" size={18} color={colors.onPrimary || '#0F2A0F'} />
             <Text
               style={{ fontFamily: fonts.bold }}
-              className="text-sm text-on-primary ml-2"
+              className="text-sm text-on-primary"
             >
               {createMutation.isPending ? 'Saving Recipe...' : 'Save Recipe'}
             </Text>
+            {createMutation.isPending && (
+              <ActivityIndicator
+                size="small"
+                color={colors.onPrimary || '#0F2A0F'}
+                style={{ marginLeft: 8 }}
+              />
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -977,6 +1042,6 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
           </ScrollView>
         </Animated.View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 };

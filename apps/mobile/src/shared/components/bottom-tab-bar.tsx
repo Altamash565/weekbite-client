@@ -1,8 +1,8 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/tokens';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { fonts } from '../theme/tokens';
 
 export type TabKey = 'recipes' | 'meals' | 'groceries' | 'favourites' | 'profile';
 
@@ -35,8 +35,8 @@ const TABS: TabItem[] = [
   {
     key: 'favourites',
     label: 'Favourites',
-    activeIcon: 'heart',
-    inactiveIcon: 'heart-outline',
+    activeIcon: 'bookmark',
+    inactiveIcon: 'bookmark-outline',
   },
   {
     key: 'profile',
@@ -59,9 +59,9 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
 
   return (
     <View
-      className="bg-surface border-t border-border flex-row justify-around items-center pt-2 px-2"
+      className="bg-white border-t border-[#EDEDED] flex-row items-center pt-1.5 px-1"
       style={{
-        paddingBottom: Math.max(insets.bottom, 10),
+        paddingBottom: Math.max(insets.bottom, 6),
       }}
     >
       {TABS.map((tab) => {
@@ -72,24 +72,31 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
             key={tab.key}
             onPress={() => onTabPress(tab.key)}
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            className="items-center justify-center min-w-[58px] min-h-[48px]"
+            className="flex-1 items-center justify-center py-0.5 min-h-[44px]"
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.65 : 1,
+              transform: [{ scale: pressed ? 0.94 : 1 }],
+            })}
           >
-            <View
-              className={`w-9 h-7 rounded-full items-center justify-center mb-0.5 ${
-                isActive ? 'bg-primary-tint' : 'bg-transparent'
-              }`}
-            >
+            {tab.key === 'recipes' ? (
+              <MaterialCommunityIcons
+                name="chef-hat"
+                size={22}
+                color={isActive ? '#000000' : '#8E8E93'}
+              />
+            ) : (
               <Ionicons
                 name={isActive ? tab.activeIcon : tab.inactiveIcon}
-                size={20}
-                color={isActive ? colors.primaryDark : colors.textSecondary}
+                size={21}
+                color="#000000"
               />
-            </View>
+            )}
             <Text
-              className={`text-[10px] ${
-                isActive
-                  ? 'font-semibold text-primary-dark'
-                  : 'font-medium text-text-secondary'
+              style={{
+                fontFamily: fonts.bold,
+              }}
+              className={`text-[10px] mt-0.5 tracking-tight font-bold ${
+                isActive ? 'text-black' : 'text-neutral-400'
               }`}
               numberOfLines={1}
             >
@@ -101,4 +108,3 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
     </View>
   );
 };
-

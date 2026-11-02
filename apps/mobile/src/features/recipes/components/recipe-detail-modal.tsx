@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDeleteRecipe, useRecipeDetail } from '../hooks/useRecipes';
-import { colors } from '../../../shared/theme/tokens';
+import { colors, fonts } from '../../../shared/theme/tokens';
 import { useCurrentUser } from '../../auth';
 
 interface RecipeDetailModalProps {
@@ -139,8 +139,11 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
         {/* Loading / Error / Content */}
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="small" color={colors.primaryDark} />
-            <Text className="font-regular text-xs text-text-secondary mt-2">
+            <ActivityIndicator size="large" color={colors.primaryDark} />
+            <Text
+              style={{ fontFamily: fonts.medium }}
+              className="text-xs text-text-secondary mt-3"
+            >
               Loading recipe...
             </Text>
           </View>

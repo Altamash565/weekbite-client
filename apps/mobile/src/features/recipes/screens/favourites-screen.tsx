@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { RecipeDetailModal } from '../components/recipe-detail-modal';
 import { useFavorites, useToggleFavorite } from '../hooks/useRecipes';
-import { colors } from '../../../shared/theme/tokens';
+import { colors, fonts } from '../../../shared/theme/tokens';
 
 export const FavouritesScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -48,30 +48,34 @@ export const FavouritesScreen: React.FC = () => {
         </View>
 
         <View className="w-10 h-10 rounded-2xl bg-primary-tint items-center justify-center">
-          <Ionicons name="heart" size={20} color={colors.primaryDark} />
+          <Ionicons name="bookmark" size={20} color={colors.primaryDark} />
         </View>
       </View>
 
       {/* Content */}
-      <ScrollView
-        className="flex-1 px-5 pt-2"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primaryDark}
-          />
-        }
-      >
-        {isLoading && !refreshing ? (
-          <View className="py-16 items-center justify-center">
-            <ActivityIndicator size="small" color={colors.primaryDark} />
-            <Text className="font-regular text-xs text-text-secondary mt-2">
-              Loading your favourites...
-            </Text>
-          </View>
-        ) : error ? (
+      {isLoading && !refreshing ? (
+        <View className="flex-1 items-center justify-center pb-16">
+          <ActivityIndicator size="large" color={colors.primaryDark} />
+          <Text
+            style={{ fontFamily: fonts.medium }}
+            className="text-xs text-text-secondary mt-3"
+          >
+            Loading your favourites...
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          className="flex-1 px-5 pt-2"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primaryDark}
+            />
+          }
+        >
+          {error ? (
           <View className="py-12 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2">
             <Ionicons name="alert-circle-outline" size={32} color={colors.error || '#D64545'} />
             <Text className="font-semibold text-sm text-text-primary mt-2">
@@ -84,13 +88,13 @@ export const FavouritesScreen: React.FC = () => {
         ) : favorites.length === 0 ? (
           <View className="py-16 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2">
             <View className="w-14 h-14 rounded-2xl bg-primary-tint items-center justify-center mb-3">
-              <Ionicons name="heart-outline" size={28} color={colors.primaryDark} />
+              <Ionicons name="bookmark-outline" size={28} color={colors.primaryDark} />
             </View>
             <Text className="font-bold text-base text-text-primary text-center">
               No favourites saved yet
             </Text>
             <Text className="font-regular text-xs text-text-secondary text-center mt-1 max-w-[240px]">
-              Tap the heart icon on any recipe in the Recipes tab to keep it handy here.
+              Bookmark any recipe in your Cookbook to keep it handy here.
             </Text>
           </View>
         ) : (
@@ -137,13 +141,14 @@ export const FavouritesScreen: React.FC = () => {
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   className="w-9 h-9 rounded-full bg-background border border-border items-center justify-center"
                 >
-                  <Ionicons name="heart" size={18} color={colors.error || '#D64545'} />
+                  <Ionicons name="bookmark" size={18} color={colors.primaryDark} />
                 </TouchableOpacity>
               </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
+      )}
 
       {/* Recipe Detail Modal */}
       <RecipeDetailModal

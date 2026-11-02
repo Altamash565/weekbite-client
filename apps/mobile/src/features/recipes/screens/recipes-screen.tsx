@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
+  Keyboard,
   RefreshControl,
   ScrollView,
   Text,
@@ -15,9 +17,16 @@ import { RecipeCard } from '../components/recipe-card';
 import { RecipeDetailModal } from '../components/recipe-detail-modal';
 import { CreateRecipeModal } from '../components/create-recipe-modal';
 import { LayoutModeToggle } from '../components/layout-mode-toggle';
+import { ChefIllustration } from '../components/chef-illustration';
 import { useFavorites, useRecipes, useToggleFavorite } from '../hooks/useRecipes';
 import { Recipe } from '../types/recipes.types';
-import { colors } from '../../../shared/theme/tokens';
+import { useCurrentUser } from '../../auth';
+import { colors, fonts } from '../../../shared/theme/tokens';
+import { useKeyboardVisible } from '../../../shared/hooks/useKeyboardVisible';
+
+const { height: WINDOW_HEIGHT } = Dimensions.get('window');
+// Calculate optical vertical center once so it is 100% static with zero glitchiness on tab change
+const EMPTY_STATE_TOP_OFFSET = Math.max(32, Math.round((WINDOW_HEIGHT - 220 - 240) / 2 - 20));
 
 interface RecipesScreenProps {
   onNavigateToCreate?: () => void;
@@ -25,6 +34,8 @@ interface RecipesScreenProps {
 
 export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate }) => {
   const insets = useSafeAreaInsets();
+  const isKeyboardVisible = useKeyboardVisible();
+  const searchInputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
 
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('grid');
@@ -34,6 +45,10 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // User Authentication Context
+  const { data: user, isLoading: isUserLoading } = useCurrentUser();
+  const currentUserId = user?.id || user?._id;
+
   // Queries & Mutations
   const {
     data: recipesData,
@@ -42,7 +57,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
     error,
   } = useRecipes({
     search: search.trim() || undefined,
-    limit: 30,
+    limit: 50,
   });
 
   const { data: favorites = [], refetch: refetchFavorites } = useFavorites();
@@ -52,7 +67,21 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
     return new Set(favorites.map((f) => f.recipeId));
   }, [favorites]);
 
-  const recipes = recipesData?.recipes || [];
+  // Only display recipes created by the current authenticated user
+  const recipes = useMemo(() => {
+    const all = recipesData?.recipes || [];
+    if (!currentUserId) return [];
+    return all.filter(
+      (recipe) =>
+        recipe.createdById === currentUserId ||
+        recipe.createdBy?.id === currentUserId ||
+        Boolean(
+          user?.email &&
+          recipe.createdBy?.email &&
+          recipe.createdBy.email.toLowerCase() === user.email.toLowerCase()
+        )
+    );
+  }, [recipesData?.recipes, currentUserId, user?.email]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -90,6 +119,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
         <View className="flex-row items-center bg-surface rounded-2xl border border-border px-3.5 h-[46px]">
           <Ionicons name="search-outline" size={17} color={colors.textSecondary} />
           <TextInput
+            ref={searchInputRef}
             value={search}
             onChangeText={setSearch}
             placeholder="Search recipes, ingredients..."
@@ -97,7 +127,9 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
             className="flex-1 ml-2 text-sm font-regular text-text-primary h-full"
             autoCapitalize="none"
             returnKeyType="search"
-            clearButtonMode="while-editing"
+            onSubmitEditing={() => {
+              Keyboard.dismiss();
+            }}
           />
           {Boolean(search) && (
             <TouchableOpacity
@@ -111,35 +143,45 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
       </View>
 
       {/* Below Search Bar: Recipe Count & Animated Layout Toggle */}
-      <View className="px-5 mb-3 flex-row items-center justify-between">
-        <Text className="font-semibold text-xs text-text-secondary tracking-wide uppercase">
-          {recipes.length} {recipes.length === 1 ? 'recipe' : 'recipes'}
-        </Text>
+      {recipes.length > 0 && (
+        <View className="px-5 mb-3 flex-row items-center justify-between">
+          <Text className="font-semibold text-xs text-text-secondary tracking-wide uppercase">
+            {recipes.length} {recipes.length === 1 ? 'recipe' : 'recipes'}
+          </Text>
 
-        <LayoutModeToggle mode={layoutMode} onChange={setLayoutMode} />
-      </View>
+          <LayoutModeToggle mode={layoutMode} onChange={setLayoutMode} />
+        </View>
+      )}
 
       {/* Main Feed */}
-      <ScrollView
-        className="flex-1 px-4"
-        contentContainerStyle={{ paddingBottom: 88 }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primaryDark}
-          />
-        }
-      >
-        {isLoading && !refreshing ? (
-          <View className="py-20 items-center justify-center">
-            <ActivityIndicator size="small" color={colors.primaryDark} />
-            <Text className="font-regular text-xs text-text-secondary mt-2">
-              Loading your cookbook...
-            </Text>
-          </View>
-        ) : error ? (
+      {(isLoading || (isUserLoading && !user)) && !refreshing ? (
+        <View className="flex-1 items-center justify-center pb-16">
+          <ActivityIndicator size="large" color={colors.primaryDark} />
+          <Text
+            style={{ fontFamily: fonts.medium }}
+            className="text-xs text-text-secondary mt-3"
+          >
+            Loading your cookbook...
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          className="flex-1 px-4"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            paddingBottom: 88,
+          }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primaryDark}
+            />
+          }
+        >
+          {error ? (
           <View className="py-14 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2">
             <Ionicons name="alert-circle-outline" size={32} color={colors.error || '#D64545'} />
             <Text className="font-semibold text-sm text-text-primary mt-2">
@@ -156,34 +198,36 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
             </TouchableOpacity>
           </View>
         ) : recipes.length === 0 ? (
-          <View className="py-16 items-center justify-center bg-surface rounded-2xl border border-border p-6 mt-2 mx-1">
-            <View className="w-16 h-16 rounded-3xl bg-primary-tint items-center justify-center mb-3">
-              <Ionicons name="restaurant-outline" size={30} color={colors.primaryDark} />
-            </View>
-            <Text className="font-bold text-base text-text-primary text-center">
-              Your cookbook is empty
-            </Text>
-            <Text className="font-regular text-xs text-text-secondary text-center mt-1 max-w-[240px] mb-5">
-              {search
-                ? `No recipes matched "${search}".`
-                : 'Save and organize your favorite meals in one place.'}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                if (onNavigateToCreate) {
-                  onNavigateToCreate();
-                } else {
-                  setIsCreateModalOpen(true);
-                }
-              }}
-              className="px-5 py-2.5 rounded-2xl bg-primary flex-row items-center"
-            >
-              <Ionicons name="add" size={18} color={colors.onPrimary || '#0F2A0F'} />
-              <Text className="font-bold text-xs text-on-primary ml-1">
-                Add Recipe
+          <View
+            style={{
+              paddingTop: EMPTY_STATE_TOP_OFFSET,
+            }}
+            className="items-center justify-center px-6 pb-6"
+          >
+            <ChefIllustration size={180} />
+            {search ? (
+              <Text
+                style={{ fontFamily: fonts.medium }}
+                className="text-sm text-text-secondary text-center mt-5"
+              >
+                No recipes matched "{search}"
               </Text>
-            </TouchableOpacity>
+            ) : (
+              <>
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-base text-text-primary text-center mt-5"
+                >
+                  No recipes yet
+                </Text>
+                <Text
+                  style={{ fontFamily: fonts.regular }}
+                  className="text-xs text-text-secondary text-center mt-1"
+                >
+                  Add your first recipe to get started
+                </Text>
+              </>
+            )}
           </View>
         ) : layoutMode === 'grid' ? (
           /* 2-Column Grid Layout */
@@ -217,29 +261,25 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({ onNavigateToCreate
           ))
         )}
       </ScrollView>
+      )}
 
       {/* Floating Action Button (+) — Sharp Square Shape */}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => {
-          if (onNavigateToCreate) {
-            onNavigateToCreate();
-          } else {
-            setIsCreateModalOpen(true);
-          }
-        }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        className="absolute right-5 bottom-4 w-14 h-14 rounded-[8px] bg-primary items-center justify-center shadow-lg active:scale-95"
-        style={{
-          elevation: 6,
-          shadowColor: '#1F8A1F',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
-          shadowRadius: 8,
-        }}
-      >
-        <Ionicons name="add" size={30} color={colors.onPrimary || '#0F2A0F'} />
-      </TouchableOpacity>
+      {!isKeyboardVisible && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            if (onNavigateToCreate) {
+              onNavigateToCreate();
+            } else {
+              setIsCreateModalOpen(true);
+            }
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          className="absolute right-5 bottom-4 w-14 h-14 rounded-[8px] bg-primary items-center justify-center"
+        >
+          <Ionicons name="add" size={30} color={colors.onPrimary || '#0F2A0F'} />
+        </TouchableOpacity>
+      )}
 
       {/* Recipe Detail Modal */}
       <RecipeDetailModal

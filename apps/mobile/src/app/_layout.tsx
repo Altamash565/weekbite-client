@@ -29,7 +29,7 @@ function AuthGate() {
   if (isLoading) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="small" color={colors.primaryDark} />
+        <ActivityIndicator size="large" color={colors.primaryDark} />
       </View>
     );
   }
@@ -52,7 +52,7 @@ export function RootLayout() {
   if (!fontsLoaded) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="small" color={colors.primaryDark} />
+        <ActivityIndicator size="large" color={colors.primaryDark} />
       </View>
     );
   }
