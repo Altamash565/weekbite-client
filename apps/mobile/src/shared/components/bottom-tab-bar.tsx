@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { fonts } from '../theme/tokens';
 
 export type TabKey = 'recipes' | 'meals' | 'groceries' | 'favourites' | 'profile';
@@ -9,22 +9,22 @@ export type TabKey = 'recipes' | 'meals' | 'groceries' | 'favourites' | 'profile
 interface TabItem {
   key: TabKey;
   label: string;
-  activeIcon: keyof typeof Ionicons.glyphMap;
-  inactiveIcon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof MaterialCommunityIcons.glyphMap;
+  inactiveIcon: keyof typeof MaterialCommunityIcons.glyphMap;
 }
 
 const TABS: TabItem[] = [
   {
     key: 'recipes',
     label: 'Recipes',
-    activeIcon: 'restaurant',
-    inactiveIcon: 'restaurant-outline',
+    activeIcon: 'chef-hat',
+    inactiveIcon: 'chef-hat',
   },
   {
     key: 'meals',
     label: 'Meals',
-    activeIcon: 'calendar',
-    inactiveIcon: 'calendar-outline',
+    activeIcon: 'calendar-month',
+    inactiveIcon: 'calendar-month-outline',
   },
   {
     key: 'groceries',
@@ -41,8 +41,8 @@ const TABS: TabItem[] = [
   {
     key: 'profile',
     label: 'Profile',
-    activeIcon: 'person',
-    inactiveIcon: 'person-outline',
+    activeIcon: 'account',
+    inactiveIcon: 'account-outline',
   },
 ];
 
@@ -78,19 +78,11 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
               transform: [{ scale: pressed ? 0.94 : 1 }],
             })}
           >
-            {tab.key === 'recipes' ? (
-              <MaterialCommunityIcons
-                name="chef-hat"
-                size={22}
-                color={isActive ? '#000000' : '#8E8E93'}
-              />
-            ) : (
-              <Ionicons
-                name={isActive ? tab.activeIcon : tab.inactiveIcon}
-                size={21}
-                color="#000000"
-              />
-            )}
+            <MaterialCommunityIcons
+              name={isActive ? tab.activeIcon : tab.inactiveIcon}
+              size={22}
+              color={isActive ? '#000000' : '#8E8E93'}
+            />
             <Text
               style={{
                 fontFamily: fonts.bold,
