@@ -15,7 +15,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Animated, {
   Easing,
   FadeIn,
@@ -48,6 +48,71 @@ const formatDuration = (minutes: number): string => {
   const hours = Math.floor(minutes / 60);
   const remainingMins = minutes % 60;
   return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
+};
+
+/**
+ * Bold Bookmark Vector Icon matching the visual stroke weight of FontAwesome6 pen-to-square.
+ * When not favorited, applies synthetic multi-directional vector offsets to match the bold
+ * outline styling seen in Bluesky action sheet icons.
+ */
+const BoldBookmarkIcon: React.FC<{
+  size: number;
+  color: string;
+  isFavorited: boolean;
+}> = ({ size, color, isFavorited }) => {
+  if (isFavorited) {
+    return (
+      <FontAwesome6
+        name="bookmark"
+        size={size}
+        color="#16A34A"
+        solid
+      />
+    );
+  }
+
+  return (
+    <View className="items-center justify-center">
+      {/* 4-way synthetic bolding offsets for crisp, bold vector stroke */}
+      <FontAwesome6
+        name="bookmark"
+        size={size}
+        color={color}
+        style={{
+          position: 'absolute',
+          transform: [{ translateX: -0.4 }, { translateY: 0 }],
+        }}
+      />
+      <FontAwesome6
+        name="bookmark"
+        size={size}
+        color={color}
+        style={{
+          position: 'absolute',
+          transform: [{ translateX: 0.4 }, { translateY: 0 }],
+        }}
+      />
+      <FontAwesome6
+        name="bookmark"
+        size={size}
+        color={color}
+        style={{
+          position: 'absolute',
+          transform: [{ translateX: 0 }, { translateY: -0.4 }],
+        }}
+      />
+      <FontAwesome6
+        name="bookmark"
+        size={size}
+        color={color}
+        style={{
+          position: 'absolute',
+          transform: [{ translateX: 0 }, { translateY: 0.4 }],
+        }}
+      />
+      <FontAwesome6 name="bookmark" size={size} color={color} />
+    </View>
+  );
 };
 
 export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
@@ -619,85 +684,62 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
       )}
       </View>
 
-      {/* Three-Dot Actions Modal Sheet (Live Blurry Background Overlay) */}
+      {/* Three-Dot Actions Modal Sheet */}
       {isSheetMounted && (
         <View style={StyleSheet.absoluteFill} className="z-50 justify-end">
-          {/* Real Native Blurry Backdrop with Light Frosted Tint */}
+          {/* Classic Dimmed Backdrop */}
           <Animated.View
-            style={[StyleSheet.absoluteFill, backdropAnimatedStyle]}
+            style={[
+              StyleSheet.absoluteFill,
+              backdropAnimatedStyle,
+              { backgroundColor: 'rgba(0, 0, 0, 0.45)' },
+            ]}
           >
-            <BlurView
-              intensity={100}
-              tint="light"
+            <Pressable
               style={StyleSheet.absoluteFill}
-            >
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
-                ]}
-              />
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={() => closeActionSheet()}
-              />
-            </BlurView>
+              onPress={() => closeActionSheet()}
+            />
           </Animated.View>
 
           {/* Modal Sheet Container with Smooth Slide-Up Animation */}
           <Animated.View
             style={[
               sheetAnimatedStyle,
-              { paddingBottom: Math.max(insets.bottom, 20) },
+              { paddingBottom: Math.max(insets.bottom + 8, 24) },
             ]}
-            className="bg-white rounded-t-[20px] px-6 pt-3 shadow-2xl border-t border-neutral-100"
+            className="bg-white rounded-t-[28px] px-4 pt-2.5 shadow-2xl"
           >
             {/* Minimal Drag Indicator */}
-            <View className="w-12 h-1 rounded-full bg-neutral-200 self-center mb-3 mt-1" />
+            <View className="w-10 h-1 rounded-full bg-neutral-300 self-center mb-3 mt-0.5" />
 
-            {/* Sheet Title (Centered matching reference image) */}
-            <View className="mb-4">
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-base font-bold text-neutral-900 text-center tracking-tight"
-              >
-                Recipe Options
-              </Text>
-            </View>
-
-            {/* Options List */}
-            <View className="bg-neutral-50 rounded-2xl overflow-hidden border border-neutral-200/60 divide-y divide-neutral-200/60 mb-3">
+            {/* Action Group 1 */}
+            <View className="bg-[#F1F5F9] rounded-[22px] overflow-hidden mb-2.5">
               {/* 1. Favourite Option */}
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => closeActionSheet(() => handleToggleFavorite())}
-                className="flex-row items-center px-4 py-3.5 bg-white active:bg-neutral-50"
+                className="flex-row items-center justify-between px-4 py-4 active:bg-neutral-200/50"
               >
-                <View
-                  className={`w-10 h-10 rounded-xl items-center justify-center mr-3.5 ${
-                    isFavorited ? 'bg-emerald-50' : 'bg-neutral-100'
-                  }`}
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[16px] font-bold text-neutral-900"
                 >
-                  <Ionicons
-                    name={isFavorited ? 'bookmark' : 'bookmark-outline'}
-                    size={20}
-                    color={isFavorited ? '#1F8A1F' : '#18181B'}
+                  {isFavorited ? 'Remove from Favourites' : 'Add to Favourites'}
+                </Text>
+                <View className="w-6 h-6 items-center justify-center">
+                  <FontAwesome6
+                    name="bookmark"
+                    size={19}
+                    color={isFavorited ? '#16A34A' : '#0F172A'}
+                    solid={isFavorited}
                   />
                 </View>
-                <View className="flex-1">
-                  <Text
-                    style={{ fontFamily: fonts.bold }}
-                    className="text-[15px] font-bold text-neutral-900"
-                  >
-                    {isFavorited ? 'Remove from Favourites' : 'Add to Favourites'}
-                  </Text>
-                </View>
-                {isFavorited && (
-                  <Ionicons name="checkmark-circle" size={18} color="#1F8A1F" />
-                )}
               </TouchableOpacity>
 
-              {/* 2. Edit Option (Clean Pencil Icon) */}
+              {/* Subtle Hairline Divider */}
+              <View className="h-[1px] bg-neutral-200/60 mx-4" />
+
+              {/* 2. Edit Option */}
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() =>
@@ -712,21 +754,22 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                     setIsEditModalOpen(true);
                   })
                 }
-                className="flex-row items-center px-4 py-3.5 bg-white active:bg-neutral-50"
+                className="flex-row items-center justify-between px-4 py-4 active:bg-neutral-200/50"
               >
-                <View className="w-10 h-10 rounded-xl bg-neutral-100 items-center justify-center mr-3.5">
-                  <Ionicons name="pencil-outline" size={19} color="#18181B" />
-                </View>
-                <View className="flex-1">
-                  <Text
-                    style={{ fontFamily: fonts.bold }}
-                    className="text-[15px] font-bold text-neutral-900"
-                  >
-                    Edit Recipe
-                  </Text>
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[16px] font-bold text-neutral-900"
+                >
+                  Edit Recipe
+                </Text>
+                <View className="w-6 h-6 items-center justify-center">
+                  <FontAwesome6 name="pen-to-square" size={19} color="#0F172A" />
                 </View>
               </TouchableOpacity>
+            </View>
 
+            {/* Action Group 2 (Destructive) */}
+            <View className="bg-[#F1F5F9] rounded-[22px] overflow-hidden">
               {/* 3. Delete Option */}
               <TouchableOpacity
                 activeOpacity={0.7}
@@ -735,42 +778,26 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                     if (!isOwner) {
                       Alert.alert(
                         'Permission Denied',
-                        'You can only delete recipes that you created.'
+                        'You can only edit recipes that you created.'
                       );
                       return;
                     }
                     handleDelete();
                   })
-                }
-                className="flex-row items-center px-4 py-3.5 bg-white active:bg-red-50"
+                }  
+                className="flex-row items-center justify-between px-4 py-4 active:bg-red-100/50"
               >
-                <View className="w-10 h-10 rounded-xl bg-red-50 items-center justify-center mr-3.5">
-                  <Ionicons name="trash-outline" size={20} color="#DC2626" />
-                </View>
-                <View className="flex-1">
-                  <Text
-                    style={{ fontFamily: fonts.bold }}
-                    className="text-[15px] font-bold text-red-600"
-                  >
-                    Delete Recipe
-                  </Text>
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[16px] font-bold text-red-600"
+                >
+                  Delete Recipe
+                </Text>
+                <View className="w-6 h-6 items-center justify-center">
+                  <Ionicons name="trash-outline" size={21} color="#DC2626" />
                 </View>
               </TouchableOpacity>
             </View>
-
-            {/* Cancel Button */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => closeActionSheet()}
-              className="w-full py-3.5 rounded-2xl bg-neutral-100 items-center justify-center active:bg-neutral-200"
-            >
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-sm font-bold text-neutral-800"
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
           </Animated.View>
         </View>
       )}
