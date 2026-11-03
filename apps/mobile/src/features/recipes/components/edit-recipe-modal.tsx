@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUpdateRecipe } from '../hooks/useRecipes';
 import { Recipe, RecipeCategory } from '../types/recipes.types';
 import { colors, fonts } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 
 const CATEGORIES: RecipeCategory[] = [
   'BREAKFAST',
@@ -98,7 +99,7 @@ export const EditRecipeModal: React.FC<EditRecipeModalProps> = ({
     if (!recipe) return;
 
     if (title.trim().length < 3) {
-      Alert.alert('Validation Error', 'Title must be at least 3 characters.');
+      toast.warning('Title Required', 'Title must be at least 3 characters.');
       return;
     }
 
@@ -107,17 +108,17 @@ export const EditRecipeModal: React.FC<EditRecipeModalProps> = ({
     const parsedServings = parseInt(servings, 10);
 
     if (isNaN(parsedPrep) || parsedPrep < 0) {
-      Alert.alert('Validation Error', 'Please enter a valid preparation time.');
+      toast.warning('Invalid Prep Time', 'Please enter a valid preparation time in minutes.');
       return;
     }
 
     if (isNaN(parsedCook) || parsedCook < 0) {
-      Alert.alert('Validation Error', 'Please enter a valid cooking time.');
+      toast.warning('Invalid Cook Time', 'Please enter a valid cooking time in minutes.');
       return;
     }
 
     if (isNaN(parsedServings) || parsedServings < 1) {
-      Alert.alert('Validation Error', 'Servings must be at least 1.');
+      toast.warning('Invalid Servings', 'Servings must be at least 1.');
       return;
     }
 
@@ -126,12 +127,12 @@ export const EditRecipeModal: React.FC<EditRecipeModalProps> = ({
       .filter((i) => Boolean(i.name && i.quantity));
 
     if (validIngredients.length === 0) {
-      Alert.alert('Validation Error', 'Please add at least one ingredient with a quantity.');
+      toast.warning('Missing Ingredients', 'Please add at least one ingredient with a quantity.');
       return;
     }
 
     if (instructions.trim().length < 10) {
-      Alert.alert('Validation Error', 'Instructions must be at least 10 characters.');
+      toast.warning('Instructions Too Short', 'Instructions must be at least 10 characters.');
       return;
     }
 
@@ -151,11 +152,11 @@ export const EditRecipeModal: React.FC<EditRecipeModalProps> = ({
       },
       {
         onSuccess: () => {
-          Alert.alert('Recipe Updated', 'Your changes have been saved.');
+          toast.success('Recipe Updated', 'Your changes have been saved.');
           onClose();
         },
         onError: (err) => {
-          Alert.alert('Update Failed', err.message || 'Could not update recipe.');
+          toast.error('Update Failed', err.message || 'Could not update recipe.');
         },
       }
     );

@@ -10,6 +10,7 @@ import {
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { colors } from '../shared/theme/tokens';
+import { ToastContainer } from '../shared/components/toast-container';
 import { useCurrentUser } from '../features/auth';
 import AuthLayout from './(auth)/_layout';
 import { TabNavigator } from './navigation/tab-navigator';
@@ -62,6 +63,7 @@ export function RootLayout() {
       <SafeAreaProvider>
         <View className="flex-1 bg-background">
           <AuthGate />
+          <ToastContainer />
         </View>
       </SafeAreaProvider>
     </QueryClientProvider>

@@ -8,6 +8,7 @@ import {
   RecipesResponse,
   UpdateRecipeDto,
 } from '../types/recipes.types';
+import { toast } from '../../../shared/services/toast';
 
 export const RECIPES_QUERY_KEY = 'recipes';
 export const FAVORITES_QUERY_KEY = 'favorites';
@@ -93,8 +94,16 @@ export function useToggleFavorite() {
         await recipesApi.addFavorite(recipeId);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, { isFavorited }) => {
       queryClient.invalidateQueries({ queryKey: [FAVORITES_QUERY_KEY] });
+      if (!isFavorited) {
+        toast.success('Added to Favourites');
+      } else {
+        toast.success('Removed from Favourites');
+      }
+    },
+    onError: (err) => {
+      toast.error('Action Failed', err.message || 'Could not update favourites.');
     },
   });
 }

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDeleteRecipe, useRecipeDetail } from '../hooks/useRecipes';
 import { colors, fonts } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 import { useCurrentUser } from '../../auth';
 
 interface RecipeDetailModalProps {
@@ -59,10 +60,11 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
           onPress: () => {
             deleteMutation.mutate(recipeId, {
               onSuccess: () => {
+                toast.success('Recipe Deleted', 'The recipe was permanently removed.');
                 onClose();
               },
               onError: (err) => {
-                Alert.alert('Delete Failed', err.message || 'Could not delete recipe');
+                toast.error('Delete Failed', err.message || 'Could not delete recipe');
               },
             });
           },

@@ -18,6 +18,7 @@ import { AuthInput } from '../components/auth-input';
 import { AuthButton } from '../components/auth-button';
 import { useLogin } from '../hooks/useAuth';
 import { colors } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 
 const signInSchema = z.object({
   email: z
@@ -57,7 +58,7 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ onNavigateToSignUp }
       },
       {
         onError: (error) => {
-          Alert.alert('Sign In Failed', error.message || 'Invalid email or password');
+          toast.error('Sign In Failed', error.message || 'Invalid email or password');
         },
       }
     );

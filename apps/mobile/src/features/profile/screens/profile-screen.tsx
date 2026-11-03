@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useCurrentUser, useLogout } from '../../auth';
 import { colors } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 
 export const ProfileScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -17,7 +18,16 @@ export const ProfileScreen: React.FC = () => {
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: () => logoutMutation.mutate(),
+        onPress: () => {
+          logoutMutation.mutate(undefined, {
+            onSuccess: () => {
+              toast.info('Signed Out', 'You have been safely signed out.');
+            },
+            onError: (err) => {
+              toast.error('Sign Out Failed', err.message || 'Could not sign out.');
+            },
+          });
+        },
       },
     ]);
   };

@@ -30,6 +30,7 @@ import Animated, {
 import { useDeleteRecipe, useFavorites, useRecipeDetail, useToggleFavorite } from '../hooks/useRecipes';
 import { useCurrentUser } from '../../auth';
 import { fonts } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 import { EditRecipeModal } from '../components/edit-recipe-modal';
 
 interface RecipeDetailScreenProps {
@@ -196,10 +197,11 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
           onPress: () => {
             deleteMutation.mutate(recipeId, {
               onSuccess: () => {
+                toast.success('Recipe Deleted', 'The recipe was permanently removed.');
                 handleBack();
               },
               onError: (err) => {
-                Alert.alert('Delete Failed', err.message || 'Could not delete recipe');
+                toast.error('Delete Failed', err.message || 'Could not delete recipe');
               },
             });
           },
@@ -443,8 +445,8 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                       >
                         Prep Time
                       </Text>
-                      <View className="w-6 h-6 rounded-full bg-[#EBF7EB] items-center justify-center">
-                        <Ionicons name="timer-outline" size={13} color="#1E7D2D" />
+                      <View className="w-5 h-5 items-end justify-center">
+                        <Ionicons name="time-outline" size={17} color="#64748B" />
                       </View>
                     </View>
                     <Text
@@ -464,8 +466,8 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                       >
                         Cook Time
                       </Text>
-                      <View className="w-6 h-6 rounded-full bg-[#FEF3C7] items-center justify-center">
-                        <Ionicons name="flame-outline" size={13} color="#D97706" />
+                      <View className="w-5 h-5 items-end justify-center">
+                        <Ionicons name="flame-outline" size={17} color="#64748B" />
                       </View>
                     </View>
                     <Text
@@ -488,8 +490,8 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                       >
                         Total Time
                       </Text>
-                      <View className="w-6 h-6 rounded-full bg-[#EFF6FF] items-center justify-center">
-                        <Ionicons name="hourglass-outline" size={13} color="#2563EB" />
+                      <View className="w-5 h-5 items-end justify-center">
+                        <Ionicons name="hourglass-outline" size={17} color="#64748B" />
                       </View>
                     </View>
                     <Text
@@ -509,8 +511,8 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                       >
                         Servings
                       </Text>
-                      <View className="w-6 h-6 rounded-full bg-[#FCE7F3] items-center justify-center">
-                        <Ionicons name="people-outline" size={13} color="#BE185D" />
+                      <View className="w-5 h-5 items-end justify-center">
+                        <Ionicons name="people-outline" size={17} color="#64748B" />
                       </View>
                     </View>
                     <Text
@@ -745,7 +747,7 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                 onPress={() =>
                   closeActionSheet(() => {
                     if (!isOwner) {
-                      Alert.alert(
+                      toast.warning(
                         'Permission Denied',
                         'You can only edit recipes that you created.'
                       );
@@ -762,7 +764,7 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                 >
                   Edit Recipe
                 </Text>
-                <View className="w-6 h-6 items-center justify-center">
+                <View className="w-6 h-6 items-end justify-center">
                   <FontAwesome6 name="pen-to-square" size={19} color="#0F172A" />
                 </View>
               </TouchableOpacity>
@@ -776,7 +778,7 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                 onPress={() =>
                   closeActionSheet(() => {
                     if (!isOwner) {
-                      Alert.alert(
+                      toast.warning(
                         'Permission Denied',
                         'You can only edit recipes that you created.'
                       );
@@ -793,8 +795,8 @@ export const RecipeDetailScreen: React.FC<RecipeDetailScreenProps> = ({
                 >
                   Delete Recipe
                 </Text>
-                <View className="w-6 h-6 items-center justify-center">
-                  <Ionicons name="trash-outline" size={21} color="#DC2626" />
+                <View className="w-6 h-6 items-end justify-center">
+                  <Ionicons name="trash-outline" size={20} color="#DC2626" />
                 </View>
               </TouchableOpacity>
             </View>

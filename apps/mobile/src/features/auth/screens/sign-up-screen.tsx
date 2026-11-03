@@ -18,6 +18,7 @@ import { AuthInput } from '../components/auth-input';
 import { AuthButton } from '../components/auth-button';
 import { useRegister } from '../hooks/useAuth';
 import { colors } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 
 const signUpSchema = z.object({
   fullName: z.string().min(1, 'Please enter your full name'),
@@ -60,7 +61,7 @@ export const SignUpScreen: React.FC<SignUpScreenProps> = ({ onNavigateToSignIn }
         },
         {
           onError: (error) => {
-            Alert.alert('Registration Failed', error.message || 'Could not create account');
+            toast.error('Registration Failed', error.message || 'Could not create account');
           },
         }
       );

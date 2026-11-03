@@ -33,6 +33,7 @@ import Animated, {
 import { useCreateRecipe } from '../hooks/useRecipes';
 import { RecipeCategory } from '../types/recipes.types';
 import { colors, fonts } from '../../../shared/theme/tokens';
+import { toast } from '../../../shared/services/toast';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -284,7 +285,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        toast.warning(
           'Permission Needed',
           'Please allow access to your photos to add a recipe cover.'
         );
@@ -303,7 +304,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         if (errors.image) setErrors((prev) => ({ ...prev, image: undefined }));
       }
     } catch {
-      Alert.alert('Error', 'Could not open photo gallery.');
+      toast.error('Error', 'Could not open photo gallery.');
     }
   };
 
@@ -311,7 +312,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        toast.warning(
           'Permission Needed',
           'Please allow camera access to take a picture of your dish.'
         );
@@ -329,7 +330,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         if (errors.image) setErrors((prev) => ({ ...prev, image: undefined }));
       }
     } catch {
-      Alert.alert('Error', 'Could not open camera.');
+      toast.error('Error', 'Could not open camera.');
     }
   };
 
@@ -412,7 +413,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
   const handleSubmit = () => {
     if (!validateForm()) {
-      Alert.alert('Missing Details', 'Please check the highlighted fields below.');
+      toast.warning('Missing Details', 'Please check the highlighted fields below.');
       return;
     }
 
@@ -438,12 +439,11 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
       },
       {
         onSuccess: () => {
-          Alert.alert('Success', 'Recipe saved successfully!', [
-            { text: 'OK', onPress: handleBack },
-          ]);
+          toast.success('Recipe Saved!', 'Your recipe has been published to your collection.');
+          handleBack();
         },
         onError: (err) => {
-          Alert.alert('Could Not Save', err.message || 'Please try again.');
+          toast.error('Could Not Save', err.message || 'Please check your connection and try again.');
         },
       }
     );
