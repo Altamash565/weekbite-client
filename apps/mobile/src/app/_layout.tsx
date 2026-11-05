@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -61,10 +62,12 @@ export function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <View className="flex-1 bg-background">
-          <AuthGate />
-          <ToastContainer />
-        </View>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View className="flex-1 bg-background">
+            <AuthGate />
+            <ToastContainer />
+          </View>
+        </GestureHandlerRootView>
       </SafeAreaProvider>
     </QueryClientProvider>
   );

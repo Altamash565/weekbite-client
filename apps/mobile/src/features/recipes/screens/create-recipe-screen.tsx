@@ -4,8 +4,8 @@ import {
   Alert,
   BackHandler,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -14,50 +14,45 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  UIManager,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeInDown,
+  FadeInUp,
+  FadeOutDown,
   FadeOutUp,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import {
+  NestableDraggableFlatList,
+  NestableScrollContainer,
+  RenderItemParams,
+  ScaleDecorator,
+} from '../../../shared/components/draggable-list';
 import { useCreateRecipe } from '../hooks/useRecipes';
 import { RecipeCategory } from '../types/recipes.types';
-import { colors, fonts } from '../../../shared/theme/tokens';
+import { fonts } from '../../../shared/theme/tokens';
 import { toast } from '../../../shared/services/toast';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+export interface DraggableItem {
+  id: string;
+  text: string;
 }
 
 interface CategoryOption {
   value: RecipeCategory;
   label: string;
   description: string;
-}
-
-interface IngredientItem {
-  name: string;
-  quantity: string;
-}
-
-interface FormErrors {
-  title?: string;
-  prepTime?: string;
-  cookTime?: string;
-  servings?: string;
-  ingredients?: string;
-  instructions?: string;
-  image?: string;
 }
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
@@ -93,26 +88,62 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
   },
 ];
 
+/**
+ * Smart line parser for ingredients entered or pasted as multi-line text.
+ * Example inputs:
+ *  - "2 cups all-purpose flour" -> { quantity: "2 cups", name: "all-purpose flour" }
+ *  - "1 1/2 tbsp olive oil"     -> { quantity: "1 1/2 tbsp", name: "olive oil" }
+ *  - "3 eggs"                   -> { quantity: "3", name: "eggs" }
+ *  - "salt and pepper"          -> { quantity: "1", name: "salt and pepper" }
+ */
+export const parseIngredientLine = (line: string): { name: string; quantity: string } | null => {
+  const trimmed = line.trim();
+  // Skip empty lines or section headers ending with ":"
+  if (!trimmed || trimmed.endsWith(':')) return null;
+
+  const qtyRegex = /^((?:\d+\s+)?\d+(?:\/\d+|\.\d+)?|\d+)(?:\s*(cups?|tbsp|tsp|tablespoons?|teaspoons?|g|kg|ml|oz|lbs?|cloves?|pinch(?:es)?|slices?|cans?|pieces?|bunch(?:es)?|handfuls?|sprigs?|stalks?|heads?|packets?))?\s+(.*)$/i;
+  const match = trimmed.match(qtyRegex);
+
+  if (match && match[3]) {
+    const qty = (match[1] + (match[2] ? ' ' + match[2] : '')).trim();
+    const name = match[3].trim();
+    if (name) {
+      return { quantity: qty, name };
+    }
+  }
+
+  // Fallback: entire line is the name
+  return { quantity: '1', name: trimmed };
+};
+
+export const parseIngredientsList = (text: string) => {
+  return text
+    .split('\n')
+    .map(parseIngredientLine)
+    .filter((item): item is { name: string; quantity: string } => Boolean(item && item.name));
+};
+
 interface CreateRecipeScreenProps {
   onBack: () => void;
 }
 
 export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const createMutation = useCreateRecipe();
 
-  // Entrance & Exit Transition Animation (Minimal & Real)
-  const translateX = useSharedValue(36);
+  // Entrance & Exit Transition Animation
+  const translateX = useSharedValue(28);
   const opacity = useSharedValue(0);
   const isClosingRef = useRef(false);
 
   useEffect(() => {
     translateX.value = withTiming(0, {
-      duration: 250,
+      duration: 220,
       easing: Easing.out(Easing.cubic),
     });
     opacity.value = withTiming(1, {
-      duration: 250,
+      duration: 220,
       easing: Easing.out(Easing.cubic),
     });
   }, [opacity, translateX]);
@@ -120,14 +151,14 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
   const handleBack = () => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    translateX.value = withTiming(36, {
-      duration: 180,
+    translateX.value = withTiming(28, {
+      duration: 160,
       easing: Easing.in(Easing.cubic),
     });
     opacity.value = withTiming(
       0,
       {
-        duration: 180,
+        duration: 160,
         easing: Easing.in(Easing.cubic),
       },
       (finished) => {
@@ -151,122 +182,160 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     transform: [{ translateX: translateX.value }],
   }));
 
-  // Form State
+  // Form Fields State matching reference design
   const [title, setTitle] = useState('');
+  const [image, setImage] = useState('');
+  const [description, setDescription] = useState('');
+  const [ingredients, setIngredients] = useState<DraggableItem[]>([
+    { id: 'ing-1', text: '' },
+  ]);
+  const [instructions, setInstructions] = useState<DraggableItem[]>([
+    { id: 'inst-1', text: '' },
+  ]);
+  const [servings, setServings] = useState('');
+  const [prepHours, setPrepHours] = useState('');
+  const [prepMinutes, setPrepMinutes] = useState('');
+  const [cookHours, setCookHours] = useState('');
+  const [cookMinutes, setCookMinutes] = useState('');
   const [category, setCategory] = useState<RecipeCategory>('DINNER');
+
+  // Ingredient List Handlers
+  const handleAddIngredient = () => {
+    setIngredients((prev) => [
+      ...prev,
+      { id: `ing-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: '' },
+    ]);
+  };
+
+  const handleRemoveIngredient = (id: string) => {
+    setIngredients((prev) => {
+      if (prev.length <= 1) {
+        return [{ id: `ing-${Date.now()}`, text: '' }];
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const handleUpdateIngredient = (id: string, text: string) => {
+    if (text.includes('\n')) {
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        setIngredients((prev) => {
+          const idx = prev.findIndex((item) => item.id === id);
+          if (idx === -1) return prev;
+          const newItems: DraggableItem[] = lines.map((line, i) => ({
+            id: i === 0 ? id : `ing-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            text: line,
+          }));
+          const next = [...prev];
+          next.splice(idx, 1, ...newItems);
+          return next;
+        });
+        return;
+      }
+    }
+    setIngredients((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, text } : item))
+    );
+  };
+
+  // Instruction List Handlers
+  const handleAddInstruction = () => {
+    setInstructions((prev) => [
+      ...prev,
+      { id: `inst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: '' },
+    ]);
+  };
+
+  const handleRemoveInstruction = (id: string) => {
+    setInstructions((prev) => {
+      if (prev.length <= 1) {
+        return [{ id: `inst-${Date.now()}`, text: '' }];
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const handleUpdateInstruction = (id: string, text: string) => {
+    if (text.includes('\n')) {
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        setInstructions((prev) => {
+          const idx = prev.findIndex((item) => item.id === id);
+          if (idx === -1) return prev;
+          const newItems: DraggableItem[] = lines.map((line, i) => ({
+            id: i === 0 ? id : `inst-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            text: line,
+          }));
+          const next = [...prev];
+          next.splice(idx, 1, ...newItems);
+          return next;
+        });
+        return;
+      }
+    }
+    setInstructions((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, text } : item))
+    );
+  };
+
+  // Category Selector Dropdown State & Coordinates
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
-  const [dropdownCoords, setDropdownCoords] = useState<{ x: number; y: number; width: number }>({
+  const [dropdownCoords, setDropdownCoords] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    openUpwards: boolean;
+    maxHeight: number;
+  }>({
     x: 0,
     y: 0,
     width: 0,
+    height: 48,
+    openUpwards: false,
+    maxHeight: 260,
   });
 
   const triggerRef = useRef<React.ElementRef<typeof View>>(null);
-
-  // Time & Portions
-  const [prepTime, setPrepTime] = useState('');
-  const [cookTime, setCookTime] = useState('');
-  const [servings, setServings] = useState('');
-
-  const [description, setDescription] = useState('');
-  const [image, setImage] = useState('');
-  const [showUrlInput, setShowUrlInput] = useState(false);
-  const [instructions, setInstructions] = useState('');
-
-  // Form Validation Errors
-  const [errors, setErrors] = useState<FormErrors>({});
-
-  // Ingredients — Auto-row on typing, zero add buttons
-  const [ingredients, setIngredients] = useState<IngredientItem[]>([
-    { name: '', quantity: '' },
-  ]);
-
-  const handleUpdateIngredient = (
-    index: number,
-    field: 'name' | 'quantity',
-    value: string
-  ) => {
-    if (errors.ingredients) {
-      setErrors((prev) => ({ ...prev, ingredients: undefined }));
-    }
-
-    setIngredients((prev) => {
-      const updated = prev.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      );
-
-      // Auto-append fresh empty row when typing in the last row
-      const last = updated[updated.length - 1];
-      if (last && (last.name.trim() !== '' || last.quantity.trim() !== '')) {
-        return [...updated, { name: '', quantity: '' }];
-      }
-
-      return updated;
-    });
-  };
-
-  const handleRemoveIngredient = (index: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIngredients((prev) => {
-      if (prev.length <= 1) {
-        return [{ name: '', quantity: '' }];
-      }
-      const filtered = prev.filter((_, i) => i !== index);
-      if (filtered.length === 0) {
-        return [{ name: '', quantity: '' }];
-      }
-      const last = filtered[filtered.length - 1];
-      if (last && (last.name.trim() !== '' || last.quantity.trim() !== '')) {
-        return [...filtered, { name: '', quantity: '' }];
-      }
-      return filtered;
-    });
-  };
-
-  const handleMoveIngredient = (index: number, direction: 'up' | 'down') => {
-    const target = direction === 'up' ? index - 1 : index + 1;
-    if (target < 0 || target >= ingredients.length) return;
-
-    // Do not swap with the last empty row
-    const targetItem = ingredients[target];
-    if (!targetItem || (!targetItem.name.trim() && !targetItem.quantity.trim())) return;
-
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIngredients((prev) => {
-      const next = [...prev];
-      const temp = next[index];
-      const targetVal = next[target];
-      if (temp && targetVal) {
-        next[index] = targetVal;
-        next[target] = temp;
-      }
-      return next;
-    });
-  };
-
-  // Reanimated Chevron Rotation
   const chevronRotation = useSharedValue(0);
 
   const openCategoryDropdown = () => {
+    Keyboard.dismiss();
     if (triggerRef.current) {
       triggerRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+        const safeBottom = Math.max(insets.bottom, 16);
+        const safeTop = Math.max(insets.top, 16);
+        const triggerHeight = height || 48;
+        const spaceBelow = windowHeight - (y + triggerHeight) - safeBottom;
+        const spaceAbove = y - safeTop;
+        const desiredHeight = 260;
+
+        // If space below is insufficient for dropdown and space above has more room, open upwards
+        const openUpwards = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+        const availableSpace = openUpwards ? spaceAbove : spaceBelow;
+        const calculatedMaxHeight = Math.max(140, Math.min(desiredHeight, availableSpace - 16));
+
         setDropdownCoords({
           x,
-          y: y + height + 6,
+          y,
           width,
+          height: triggerHeight,
+          openUpwards,
+          maxHeight: calculatedMaxHeight,
         });
         setIsCategoryOpen(true);
-        chevronRotation.value = withTiming(180, { duration: 200 });
+        chevronRotation.value = withTiming(180, { duration: 200, easing: Easing.out(Easing.cubic) });
       });
     } else {
       setIsCategoryOpen(true);
-      chevronRotation.value = withTiming(180, { duration: 200 });
+      chevronRotation.value = withTiming(180, { duration: 200, easing: Easing.out(Easing.cubic) });
     }
   };
 
   const closeCategoryDropdown = () => {
     setIsCategoryOpen(false);
-    chevronRotation.value = withTiming(0, { duration: 200 });
+    chevronRotation.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
   };
 
   const handleSelectCategory = (val: RecipeCategory) => {
@@ -278,9 +347,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     transform: [{ rotate: `${chevronRotation.value}deg` }],
   }));
 
-  const selectedCategoryOption =
-    CATEGORY_OPTIONS.find((c) => c.value === category) || CATEGORY_OPTIONS[2];
-
+  // Photo Upload Actions
   const handlePickFromLibrary = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -301,10 +368,9 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImage(result.assets[0].uri);
-        if (errors.image) setErrors((prev) => ({ ...prev, image: undefined }));
       }
     } catch {
-      toast.error('Error', 'Could not open photo gallery.');
+      toast.error('Gallery Error', 'Could not open photo gallery.');
     }
   };
 
@@ -327,14 +393,13 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImage(result.assets[0].uri);
-        if (errors.image) setErrors((prev) => ({ ...prev, image: undefined }));
       }
     } catch {
-      toast.error('Error', 'Could not open camera.');
+      toast.error('Camera Error', 'Could not open camera.');
     }
   };
 
-  const handleImageUploadPress = () => {
+  const handleImagePickerPress = () => {
     Alert.alert('Cover Photo', 'Choose how you want to add a picture:', [
       {
         text: 'Choose from Gallery',
@@ -351,79 +416,42 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     ]);
   };
 
-  // Comprehensive Form Validation
-  const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    if (!title.trim()) {
-      newErrors.title = 'Please enter a recipe name.';
-    } else if (title.trim().length < 3) {
-      newErrors.title = 'Recipe name must be at least 3 letters.';
-    } else if (title.trim().length > 100) {
-      newErrors.title = 'Recipe name cannot be longer than 100 letters.';
-    }
-
-    const parsedPrep = prepTime.trim() ? parseInt(prepTime, 10) : 0;
-    if (prepTime.trim() && (isNaN(parsedPrep) || parsedPrep < 0)) {
-      newErrors.prepTime = 'Must be 0 or more.';
-    }
-
-    const parsedCook = cookTime.trim() ? parseInt(cookTime, 10) : 0;
-    if (cookTime.trim() && (isNaN(parsedCook) || parsedCook < 0)) {
-      newErrors.cookTime = 'Must be 0 or more.';
-    }
-
-    const parsedServings = servings.trim() ? parseInt(servings, 10) : 1;
-    if (servings.trim() && (isNaN(parsedServings) || parsedServings < 1)) {
-      newErrors.servings = 'At least 1.';
-    }
-
-    const validIngredients = ingredients
-      .map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() }))
-      .filter((i) => Boolean(i.name || i.quantity));
-
-    if (validIngredients.length === 0) {
-      newErrors.ingredients = 'Please enter at least one ingredient with an amount.';
-    } else {
-      const incomplete = validIngredients.some((i) => !i.name || !i.quantity);
-      if (incomplete) {
-        newErrors.ingredients = 'Please fill both the ingredient name and amount.';
-      }
-    }
-
-    if (!instructions.trim()) {
-      newErrors.instructions = 'Please write the cooking steps.';
-    } else if (instructions.trim().length < 10) {
-      newErrors.instructions = 'Cooking steps should be at least 10 letters long.';
-    }
-
-    if (
-      image.trim() &&
-      !image.trim().startsWith('http://') &&
-      !image.trim().startsWith('https://') &&
-      !image.trim().startsWith('file://') &&
-      !image.trim().startsWith('content://')
-    ) {
-      newErrors.image = 'Link should start with http:// or https://';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
+  // Submit Handler with Clean Validation Toasts
   const handleSubmit = () => {
-    if (!validateForm()) {
-      toast.warning('Missing Details', 'Please check the highlighted fields below.');
+    if (!title.trim() || title.trim().length < 3) {
+      toast.warning('Title Required', 'Title must be at least 3 characters.');
       return;
     }
 
-    const parsedPrep = prepTime.trim() ? parseInt(prepTime, 10) : 0;
-    const parsedCook = cookTime.trim() ? parseInt(cookTime, 10) : 0;
-    const parsedServings = servings.trim() ? parseInt(servings, 10) : 1;
+    const parsedIngredients = ingredients
+      .map((item) => parseIngredientLine(item.text))
+      .filter((item): item is { name: string; quantity: string } => Boolean(item && item.name));
 
-    const validIngredients = ingredients
-      .map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() }))
-      .filter((i) => Boolean(i.name && i.quantity));
+    if (parsedIngredients.length === 0) {
+      toast.warning(
+        'Missing Ingredients',
+        'Please enter at least one ingredient.'
+      );
+      return;
+    }
+
+    const validInstructions = instructions
+      .map((item) => item.text.trim())
+      .filter(Boolean);
+
+    if (validInstructions.length === 0 || validInstructions.join('\n').length < 10) {
+      toast.warning(
+        'Instructions Needed',
+        'Instructions must be at least 10 characters.'
+      );
+      return;
+    }
+
+    const totalPrepMinutes =
+      (parseInt(prepHours, 10) || 0) * 60 + (parseInt(prepMinutes, 10) || 0);
+    const totalCookMinutes =
+      (parseInt(cookHours, 10) || 0) * 60 + (parseInt(cookMinutes, 10) || 0);
+    const parsedServings = parseInt(servings, 10) || 1;
 
     createMutation.mutate(
       {
@@ -431,538 +459,497 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         description: description.trim() || undefined,
         image: image.trim() || undefined,
         category,
-        prepTime: parsedPrep,
-        cookTime: parsedCook,
+        prepTime: totalPrepMinutes,
+        cookTime: totalCookMinutes,
         servings: parsedServings,
-        instructions: instructions.trim(),
-        ingredients: validIngredients,
+        instructions: validInstructions.join('\n'),
+        ingredients: parsedIngredients,
       },
       {
         onSuccess: () => {
-          toast.success('Recipe Saved!', 'Your recipe has been published to your collection.');
+          toast.success('Recipe Added', 'Your recipe has been saved to your collection.');
           handleBack();
         },
         onError: (err) => {
-          toast.error('Could Not Save', err.message || 'Please check your connection and try again.');
+          toast.error('Save Failed', err.message || 'Please check your connection and try again.');
         },
       }
     );
   };
 
-  // Count entered ingredients (ignoring trailing empty input)
-  const enteredCount = ingredients.filter(
-    (i) => i.name.trim() !== '' || i.quantity.trim() !== ''
-  ).length;
+  // Draggable Row Renderers
+  const renderIngredientItem = ({
+    item,
+    isActive,
+    getIndex,
+    DragHandle,
+  }: RenderItemParams<DraggableItem>) => {
+    const index = typeof getIndex === 'function' ? (getIndex() ?? 0) : 0;
+    return (
+      <ScaleDecorator activeScale={1.04}>
+        <View
+          style={[
+            styles.rowContainer,
+            isActive && styles.rowContainerActive,
+          ]}
+        >
+          {/* Handle-Only Activation: 6-dot handle icon with instant drag */}
+          <DragHandle
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.dragHandle}
+          >
+            <MaterialIcons
+              name="drag-indicator"
+              size={22}
+              color={isActive ? '#0F172A' : '#94A3B8'}
+            />
+          </DragHandle>
+
+          {/* Fully interactable and editable row TextInput */}
+          <TextInput
+            value={item.text}
+            onChangeText={(text) => handleUpdateIngredient(item.id, text)}
+            placeholder={index === 0 ? 'e.g. 2 cups all-purpose flour' : 'Ingredient'}
+            placeholderTextColor="#94A3B8"
+            style={styles.rowInput}
+          />
+
+          {ingredients.length > 1 && (
+            <TouchableOpacity
+              activeOpacity={0.6}
+              onPress={() => handleRemoveIngredient(item.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.removeButton}
+            >
+              <Ionicons name="close" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScaleDecorator>
+    );
+  };
+
+  const renderInstructionItem = ({
+    item,
+    isActive,
+    getIndex,
+    DragHandle,
+  }: RenderItemParams<DraggableItem>) => {
+    const index = typeof getIndex === 'function' ? (getIndex() ?? 0) : 0;
+    return (
+      <ScaleDecorator activeScale={1.04}>
+        <View
+          style={[
+            styles.rowContainer,
+            isActive && styles.rowContainerActive,
+          ]}
+        >
+          {/* Handle-Only Activation: 6-dot handle icon with instant drag */}
+          <DragHandle
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.dragHandle}
+          >
+            <MaterialIcons
+              name="drag-indicator"
+              size={22}
+              color={isActive ? '#0F172A' : '#94A3B8'}
+            />
+          </DragHandle>
+
+          {/* Step Number Badge */}
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepNumber}>
+              {index + 1}
+            </Text>
+          </View>
+
+          {/* Fully interactable and editable row TextInput */}
+          <TextInput
+            value={item.text}
+            onChangeText={(text) => handleUpdateInstruction(item.id, text)}
+            placeholder={index === 0 ? 'e.g. Preheat oven to 375°F (190°C)' : `Step ${index + 1}`}
+            placeholderTextColor="#94A3B8"
+            multiline
+            style={styles.rowInputMultiline}
+          />
+
+          {instructions.length > 1 && (
+            <TouchableOpacity
+              activeOpacity={0.6}
+              onPress={() => handleRemoveInstruction(item.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.removeButton}
+            >
+              <Ionicons name="close" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScaleDecorator>
+    );
+  };
+
+  const selectedCategoryLabel =
+    CATEGORY_OPTIONS.find((c) => c.value === category)?.label || 'Dinner';
 
   return (
-    <Animated.View
-      className="flex-1 bg-background"
-      style={[{ paddingTop: insets.top }, animatedScreenStyle]}
-    >
-      <StatusBar style="dark" />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Animated.View style={[styles.root, animatedScreenStyle]}>
+        <StatusBar style="dark" />
 
-      {/* Screen Top Bar */}
-      <View className="px-5 py-3.5 flex-row items-center border-b border-border bg-surface">
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={handleBack}
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          className="mr-3 p-1 -ml-1"
+        {/* Top Navigation Header */}
+        <View
+          style={{ paddingTop: Math.max(insets.top, 14) }}
+          className="bg-white border-b border-neutral-100 z-10"
         >
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-
-        <Text
-          style={{ fontFamily: fonts.bold }}
-          className="text-xl text-text-primary tracking-tight"
-        >
-          New Recipe
-        </Text>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-      >
-        <ScrollView
-          className="flex-1 px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 32, 48) }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Border Box 1: Recipe Details & Cover Photo */}
-          <View className="bg-surface rounded-2xl border border-border p-4 mb-4">
-            <Text
-              style={{ fontFamily: fonts.semiBold }}
-              className="text-[11px] text-text-secondary uppercase tracking-wider mb-2.5"
-            >
-              Recipe Details *
-            </Text>
-
-            {/* Title Input */}
-            <TextInput
-              value={title}
-              onChangeText={(val) => {
-                setTitle(val);
-                if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
-              }}
-              placeholder="Recipe name (e.g. Garlic Chicken)"
-              placeholderTextColor={colors.textSecondary}
-              style={{ fontFamily: fonts.medium }}
-              className={`bg-surface-low rounded-xl px-3.5 h-[46px] text-sm text-text-primary border ${
-                errors.title ? 'border-error' : 'border-border/70'
-              } mb-1`}
-            />
-            {errors.title && (
-              <Text
-                style={{ fontFamily: fonts.medium }}
-                className="text-xs text-error mb-2.5 ml-1"
-              >
-                {errors.title}
-              </Text>
-            )}
-
-            {/* Description Input */}
-            <TextInput
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Add a short description (optional)"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={2}
-              style={{ fontFamily: fonts.medium }}
-              className="bg-surface-low rounded-xl px-3.5 py-3 text-sm text-text-primary border border-border/70 min-h-[64px] mt-2 mb-3.5"
-            />
-
-            <Text
-              style={{ fontFamily: fonts.semiBold }}
-              className="text-[11px] text-text-secondary uppercase tracking-wider mb-2"
-            >
-              Cover Photo (Optional)
-            </Text>
-
-            {image ? (
-              <View className="w-full h-44 rounded-xl overflow-hidden border border-border relative bg-surface-low">
-                <Image
-                  source={{ uri: image }}
-                  className="w-full h-full"
-                  resizeMode="cover"
-                />
-                <View className="absolute top-2.5 right-2.5 flex-row items-center gap-2">
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handleImageUploadPress}
-                    className="flex-row items-center bg-black/60 px-2.5 py-1.5 rounded-lg"
-                  >
-                    <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
-                    <Text
-                      style={{ fontFamily: fonts.medium }}
-                      className="text-xs text-white ml-1.5"
-                    >
-                      Change
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setImage('')}
-                    className="w-8 h-8 rounded-lg bg-black/60 items-center justify-center"
-                  >
-                    <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={handleImageUploadPress}
-                className="w-full py-5 rounded-xl border border-dashed border-border bg-surface-low items-center justify-center"
-              >
-                <View className="w-11 h-11 rounded-2xl bg-primary-tint items-center justify-center mb-2">
-                  <Ionicons name="camera-outline" size={22} color={colors.primaryDark} />
-                </View>
-                <Text
-                  style={{ fontFamily: fonts.semiBold }}
-                  className="text-sm text-text-primary"
-                >
-                  Add a photo
-                </Text>
-                <Text
-                  style={{ fontFamily: fonts.regular }}
-                  className="text-[11px] text-text-secondary mt-0.5"
-                >
-                  Choose from gallery or take a picture
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Optional URL Toggle */}
+          <View className="h-14 px-5 flex-row items-center">
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => setShowUrlInput((prev) => !prev)}
-              className="mt-2.5 flex-row items-center justify-center py-1"
+              onPress={handleBack}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              className="mr-3 p-1 -ml-1"
             >
-              <Ionicons
-                name={showUrlInput ? 'chevron-up' : 'link-outline'}
-                size={13}
-                color={colors.textSecondary}
-              />
-              <Text
-                style={{ fontFamily: fonts.medium }}
-                className="text-xs text-text-secondary ml-1.5"
-              >
-                {showUrlInput ? 'Hide image link' : 'Or paste an image web link'}
-              </Text>
+              <Ionicons name="arrow-back" size={24} color="#0F172A" />
             </TouchableOpacity>
-
-            {/* URL Input */}
-            {showUrlInput && (
-              <View className="mt-2">
-                <TextInput
-                  value={image}
-                  onChangeText={(val) => {
-                    setImage(val);
-                    if (errors.image) setErrors((prev) => ({ ...prev, image: undefined }));
-                  }}
-                  placeholder="Paste an image link (e.g. https://...)"
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  style={{ fontFamily: fonts.medium }}
-                  className={`bg-surface-low rounded-xl px-3.5 h-[46px] text-sm text-text-primary border ${
-                    errors.image ? 'border-error' : 'border-border/70'
-                  }`}
-                />
-                {errors.image && (
-                  <Text
-                    style={{ fontFamily: fonts.medium }}
-                    className="text-xs text-error mt-1 ml-1"
-                  >
-                    {errors.image}
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* Border Box 2: Category Selector */}
-          <View className="bg-surface rounded-2xl border border-border p-4 mb-4">
             <Text
-              style={{ fontFamily: fonts.semiBold }}
-              className="text-[11px] text-text-secondary uppercase tracking-wider mb-2.5"
+              style={{ fontFamily: fonts.bold }}
+              className="text-[19px] text-neutral-900 tracking-tight"
             >
-              Category *
+              Add a recipe
             </Text>
-
-            {/* Dropdown Trigger Field */}
-            <View ref={triggerRef} collapsable={false}>
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={() => {
-                  if (isCategoryOpen) {
-                    closeCategoryDropdown();
-                  } else {
-                    openCategoryDropdown();
-                  }
-                }}
-                className={`w-full h-[46px] rounded-xl px-3.5 flex-row items-center justify-between border ${
-                  isCategoryOpen
-                    ? 'border-primary bg-surface'
-                    : 'border-border/70 bg-surface-low'
-                }`}
-              >
-                <Text
-                  style={{ fontFamily: fonts.medium }}
-                  className="text-sm text-text-primary"
-                >
-                  {selectedCategoryOption.label}
-                </Text>
-
-                <Animated.View style={animatedChevronStyle}>
-                  <Ionicons
-                    name="chevron-down"
-                    size={18}
-                    color={isCategoryOpen ? colors.primaryDark : colors.textSecondary}
-                  />
-                </Animated.View>
-              </TouchableOpacity>
-            </View>
           </View>
+        </View>
 
-          {/* Border Box 3: Time & Portions */}
-          <View className="bg-surface rounded-2xl border border-border p-4 mb-4">
-            <Text
-              style={{ fontFamily: fonts.semiBold }}
-              className="text-[11px] text-text-secondary uppercase tracking-wider mb-2.5"
-            >
-              Cooking Time & Servings *
-            </Text>
-
-            <View className="flex-row gap-3">
-              <View className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 bg-[#F8F9FA]"
+        >
+          <NestableScrollContainer
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: Math.max(insets.bottom + 24, 40),
+            }}
+          >
+            {/* Main White Card Container matching reference screenshot */}
+            <View className="bg-white rounded-[24px] p-5 border border-neutral-200/60 shadow-sm mb-4">
+              {/* 1. Title* */}
+              <View className="mb-5">
                 <Text
-                  style={{ fontFamily: fonts.medium }}
-                  className="text-[11px] text-text-secondary mb-1"
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
                 >
-                  Prep time (mins)
+                  Title*
                 </Text>
                 <TextInput
-                  value={prepTime}
-                  onChangeText={(val) => {
-                    setPrepTime(val);
-                    if (errors.prepTime) setErrors((prev) => ({ ...prev, prepTime: undefined }));
-                  }}
-                  placeholder="15"
-                  placeholderTextColor={colors.textSecondary + '70'}
-                  keyboardType="numeric"
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Title"
+                  placeholderTextColor="#94A3B8"
                   style={{ fontFamily: fonts.medium }}
-                  className={`bg-surface-low rounded-xl border px-3 h-[46px] text-sm text-text-primary text-center ${
-                    errors.prepTime ? 'border-error' : 'border-border/70'
-                  }`}
+                  className="h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
                 />
-                {errors.prepTime && (
-                  <Text
-                    style={{ fontFamily: fonts.medium }}
-                    className="text-[10px] text-error mt-1 text-center"
-                  >
-                    {errors.prepTime}
-                  </Text>
-                )}
               </View>
 
-              <View className="flex-1">
+              {/* 2. Image Upload Box */}
+              <View className="mb-5">
                 <Text
-                  style={{ fontFamily: fonts.medium }}
-                  className="text-[11px] text-text-secondary mb-1"
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
                 >
-                  Cook time (mins)
+                  Image
                 </Text>
-                <TextInput
-                  value={cookTime}
-                  onChangeText={(val) => {
-                    setCookTime(val);
-                    if (errors.cookTime) setErrors((prev) => ({ ...prev, cookTime: undefined }));
-                  }}
-                  placeholder="25"
-                  placeholderTextColor={colors.textSecondary + '70'}
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className={`bg-surface-low rounded-xl border px-3 h-[46px] text-sm text-text-primary text-center ${
-                    errors.cookTime ? 'border-error' : 'border-border/70'
-                  }`}
-                />
-                {errors.cookTime && (
-                  <Text
-                    style={{ fontFamily: fonts.medium }}
-                    className="text-[10px] text-error mt-1 text-center"
-                  >
-                    {errors.cookTime}
-                  </Text>
-                )}
-              </View>
 
-              <View className="flex-1">
-                <Text
-                  style={{ fontFamily: fonts.medium }}
-                  className="text-[11px] text-text-secondary mb-1"
-                >
-                  Servings
-                </Text>
-                <TextInput
-                  value={servings}
-                  onChangeText={(val) => {
-                    setServings(val);
-                    if (errors.servings) setErrors((prev) => ({ ...prev, servings: undefined }));
-                  }}
-                  placeholder="2"
-                  placeholderTextColor={colors.textSecondary + '70'}
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className={`bg-surface-low rounded-xl border px-3 h-[46px] text-sm text-text-primary text-center ${
-                    errors.servings ? 'border-error' : 'border-border/70'
-                  }`}
-                />
-                {errors.servings && (
-                  <Text
-                    style={{ fontFamily: fonts.medium }}
-                    className="text-[10px] text-error mt-1 text-center"
-                  >
-                    {errors.servings}
-                  </Text>
-                )}
-              </View>
-            </View>
-          </View>
-
-          {/* Border Box 4: Ingredients */}
-          <View className="bg-surface rounded-2xl border border-border p-4 mb-4">
-            <View className="flex-row items-center justify-between mb-2">
-              <View className="flex-row items-center">
-                <Text
-                  style={{ fontFamily: fonts.semiBold }}
-                  className="text-[11px] text-text-secondary uppercase tracking-wider"
-                >
-                  Ingredients *
-                </Text>
-                {enteredCount > 1 && (
-                  <Text
-                    style={{ fontFamily: fonts.regular }}
-                    className="text-[10px] text-text-secondary/70 ml-2"
-                  >
-                    (Use ↑ / ↓ to arrange)
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {errors.ingredients && (
-              <Text
-                style={{ fontFamily: fonts.medium }}
-                className="text-xs text-error mb-2.5 ml-0.5"
-              >
-                {errors.ingredients}
-              </Text>
-            )}
-
-            {/* Ingredients List */}
-            {ingredients.map((ing, idx) => {
-              const hasContent = Boolean(ing.name.trim() || ing.quantity.trim());
-              const isLastEmpty = idx === ingredients.length - 1 && !hasContent;
-              const canMoveUp = idx > 0 && hasContent;
-              const canMoveDown = idx < enteredCount - 1 && hasContent;
-
-              return (
-                <View
-                  key={idx}
-                  className="flex-row items-center mb-2.5"
-                >
-                  {/* Arrange Up / Down Controls */}
-                  {enteredCount > 1 && !isLastEmpty ? (
-                    <View className="flex-col mr-1.5 items-center justify-center w-5">
+                {image ? (
+                  <View className="relative h-[180px] rounded-[16px] overflow-hidden border border-neutral-200">
+                    <Image source={{ uri: image }} className="w-full h-full" resizeMode="cover" />
+                    <View className="absolute bottom-2.5 right-2.5 flex-row gap-2">
                       <TouchableOpacity
-                        activeOpacity={0.6}
-                        onPress={() => handleMoveIngredient(idx, 'up')}
-                        disabled={!canMoveUp}
-                        hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }}
-                        className={`p-0.5 ${!canMoveUp ? 'opacity-20' : 'opacity-80'}`}
+                        activeOpacity={0.8}
+                        onPress={handleImagePickerPress}
+                        className="bg-black/75 px-3 py-1.5 rounded-full flex-row items-center"
                       >
-                        <Ionicons name="chevron-up" size={15} color={colors.textPrimary} />
+                        <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
+                        <Text
+                          style={{ fontFamily: fonts.semiBold }}
+                          className="text-xs text-white ml-1.5"
+                        >
+                          Change
+                        </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        activeOpacity={0.6}
-                        onPress={() => handleMoveIngredient(idx, 'down')}
-                        disabled={!canMoveDown}
-                        hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }}
-                        className={`p-0.5 ${!canMoveDown ? 'opacity-20' : 'opacity-80'}`}
+                        activeOpacity={0.8}
+                        onPress={() => setImage('')}
+                        className="bg-black/75 w-8 h-8 rounded-full items-center justify-center"
                       >
-                        <Ionicons name="chevron-down" size={15} color={colors.textPrimary} />
+                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
                       </TouchableOpacity>
                     </View>
-                  ) : null}
-
-                  {/* Ingredient Name Input */}
-                  <TextInput
-                    value={ing.name}
-                    onChangeText={(val) => handleUpdateIngredient(idx, 'name', val)}
-                    placeholder="Ingredient (e.g. Chicken)"
-                    placeholderTextColor={colors.textSecondary}
-                    style={{ fontFamily: fonts.medium }}
-                    className="flex-1 bg-surface-low rounded-xl border border-border/70 px-3.5 h-[46px] text-sm text-text-primary mr-2"
-                  />
-
-                  {/* Quantity Input */}
-                  <TextInput
-                    value={ing.quantity}
-                    onChangeText={(val) => handleUpdateIngredient(idx, 'quantity', val)}
-                    placeholder="Amount (e.g. 2 cups)"
-                    placeholderTextColor={colors.textSecondary}
-                    style={{ fontFamily: fonts.medium }}
-                    className="w-28 bg-surface-low rounded-xl border border-border/70 px-3.5 h-[46px] text-sm text-text-primary"
-                  />
-
-                  {/* Delete Icon */}
-                  {!isLastEmpty && (
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      onPress={() => handleRemoveIngredient(idx)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      className="w-9 h-[46px] items-center justify-center ml-1"
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleImagePickerPress}
+                    className="h-[175px] rounded-[16px] border border-dashed border-neutral-300 bg-[#FAFAFA] items-center justify-center p-4 active:bg-neutral-100/60"
+                  >
+                    <Ionicons name="image-outline" size={40} color="#0F172A" />
+                    <Text
+                      style={{ fontFamily: fonts.bold }}
+                      className="text-[15px] text-neutral-900 mt-2 mb-1"
                     >
-                      <Ionicons
-                        name="trash-outline"
-                        size={17}
-                        color={colors.error || '#D64545'}
-                      />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+                      Add photo
+                    </Text>
+                    <Text
+                      style={{ fontFamily: fonts.medium }}
+                      className="text-[12px] text-neutral-400"
+                    >
+                      PNG, JPG, JPEG, WEBP (Max 10MB)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-          {/* Border Box 5: Instructions */}
-          <View className="bg-surface rounded-2xl border border-border p-4 mb-6">
-            <Text
-              style={{ fontFamily: fonts.semiBold }}
-              className="text-[11px] text-text-secondary uppercase tracking-wider mb-2"
-            >
-              Instructions *
-            </Text>
+              {/* 3. Description */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
+                >
+                  Description
+                </Text>
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Description"
+                  placeholderTextColor="#94A3B8"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  style={{ fontFamily: fonts.medium }}
+                  className="min-h-[85px] rounded-[12px] border border-neutral-200 bg-white p-3.5 text-[14.5px] text-neutral-900 leading-snug"
+                />
+              </View>
 
-            <TextInput
-              value={instructions}
-              onChangeText={(val) => {
-                setInstructions(val);
-                if (errors.instructions) {
-                  setErrors((prev) => ({ ...prev, instructions: undefined }));
-                }
-              }}
-              placeholder="Write the cooking steps here..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              style={{ fontFamily: fonts.medium }}
-              className={`bg-surface-low rounded-xl border p-3.5 text-sm text-text-primary min-h-[130px] leading-5 ${
-                errors.instructions ? 'border-error' : 'border-border/70'
-              }`}
-            />
-            {errors.instructions && (
+              {/* 4. Ingredients (Draggable Reorderable List) */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-0.5"
+                >
+                  Ingredients
+                </Text>
+                <Text
+                  style={{ fontFamily: fonts.medium }}
+                  className="text-[12px] text-neutral-400 mb-2.5"
+                >
+                  Hold handle to reorder. Tap input to edit.
+                </Text>
+
+                <NestableDraggableFlatList
+                  data={ingredients}
+                  onDragEnd={({ data }) => setIngredients(data)}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderIngredientItem}
+                  scrollEnabled={false}
+                />
+
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={handleAddIngredient}
+                  className="flex-row items-center justify-center py-2.5 px-3 rounded-[12px] border border-dashed border-neutral-300 bg-[#FAFAFA] active:bg-neutral-100/60 mt-1"
+                >
+                  <Ionicons name="add" size={18} color="#0F172A" />
+                  <Text
+                    style={{ fontFamily: fonts.semiBold }}
+                    className="text-[13.5px] text-neutral-800 ml-1.5"
+                  >
+                    Add ingredient
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 5. Instructions (Draggable Reorderable List) */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-0.5"
+                >
+                  Instructions
+                </Text>
+                <Text
+                  style={{ fontFamily: fonts.medium }}
+                  className="text-[12px] text-neutral-400 mb-2.5"
+                >
+                  Hold handle to reorder steps. Tap input to edit.
+                </Text>
+
+                <NestableDraggableFlatList
+                  data={instructions}
+                  onDragEnd={({ data }) => setInstructions(data)}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderInstructionItem}
+                  scrollEnabled={false}
+                />
+
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={handleAddInstruction}
+                  className="flex-row items-center justify-center py-2.5 px-3 rounded-[12px] border border-dashed border-neutral-300 bg-[#FAFAFA] active:bg-neutral-100/60 mt-1"
+                >
+                  <Ionicons name="add" size={18} color="#0F172A" />
+                  <Text
+                    style={{ fontFamily: fonts.semiBold }}
+                    className="text-[13.5px] text-neutral-800 ml-1.5"
+                  >
+                    Add step
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+            {/* 6. Servings */}
+            <View className="mb-5">
               <Text
-                style={{ fontFamily: fonts.medium }}
-                className="text-xs text-error mt-1 ml-1"
+                style={{ fontFamily: fonts.bold }}
+                className="text-[15px] text-neutral-900 mb-2"
               >
-                {errors.instructions}
+                Servings
               </Text>
-            )}
+              <TextInput
+                value={servings}
+                onChangeText={setServings}
+                placeholder="Servings"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                style={{ fontFamily: fonts.medium }}
+                className="h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+              />
+            </View>
+
+            {/* 7. Prep Time */}
+            <View className="mb-5">
+              <Text
+                style={{ fontFamily: fonts.bold }}
+                className="text-[15px] text-neutral-900 mb-2"
+              >
+                Prep Time
+              </Text>
+              <View className="flex-row gap-3">
+                <TextInput
+                  value={prepHours}
+                  onChangeText={setPrepHours}
+                  placeholder="Hours"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  style={{ fontFamily: fonts.medium }}
+                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                />
+                <TextInput
+                  value={prepMinutes}
+                  onChangeText={setPrepMinutes}
+                  placeholder="Minutes"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  style={{ fontFamily: fonts.medium }}
+                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                />
+              </View>
+            </View>
+
+            {/* 8. Cook Time */}
+            <View className="mb-5">
+              <Text
+                style={{ fontFamily: fonts.bold }}
+                className="text-[15px] text-neutral-900 mb-2"
+              >
+                Cook Time
+              </Text>
+              <View className="flex-row gap-3">
+                <TextInput
+                  value={cookHours}
+                  onChangeText={setCookHours}
+                  placeholder="Hours"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  style={{ fontFamily: fonts.medium }}
+                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                />
+                <TextInput
+                  value={cookMinutes}
+                  onChangeText={setCookMinutes}
+                  placeholder="Minutes"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  style={{ fontFamily: fonts.medium }}
+                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                />
+              </View>
+            </View>
+
+            {/* 9. Category Section (Animated Dropdown) */}
+            <View className="mb-1">
+              <Text
+                style={{ fontFamily: fonts.bold }}
+                className="text-[15px] text-neutral-900 mb-2"
+              >
+                Category
+              </Text>
+              <View ref={triggerRef} collapsable={false}>
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    if (isCategoryOpen) {
+                      closeCategoryDropdown();
+                    } else {
+                      openCategoryDropdown();
+                    }
+                  }}
+                  className={`w-full h-[48px] rounded-[12px] px-4 flex-row items-center justify-between border bg-white ${
+                    isCategoryOpen ? 'border-neutral-800' : 'border-neutral-200'
+                  }`}
+                >
+                  <Text
+                    style={{ fontFamily: fonts.medium }}
+                    className="text-[14.5px] text-neutral-900"
+                  >
+                    {selectedCategoryLabel}
+                  </Text>
+                  <Animated.View style={animatedChevronStyle}>
+                    <Ionicons
+                      name="chevron-down"
+                      size={18}
+                      color={isCategoryOpen ? '#0F172A' : '#64748B'}
+                    />
+                  </Animated.View>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
-          {/* Bottom Primary Action Button: "Save Recipe" */}
+          {/* 10. Bottom "Add Recipe" Button (Outside contents card) */}
           <TouchableOpacity
-            activeOpacity={0.8}
+            activeOpacity={0.88}
             onPress={handleSubmit}
             disabled={createMutation.isPending}
-            className={`w-full h-[52px] rounded-xl bg-primary items-center justify-center flex-row shadow-sm ${
-              createMutation.isPending ? 'opacity-85' : ''
+            style={{ backgroundColor: '#32CD32' }}
+            className={`w-full h-[52px] rounded-[16px] items-center justify-center flex-row shadow-sm ${
+              createMutation.isPending ? 'opacity-80' : ''
             }`}
           >
             <Text
               style={{ fontFamily: fonts.bold }}
-              className="text-sm text-on-primary"
+              className="text-[16px] text-[#0F2A0F]"
             >
-              {createMutation.isPending ? 'Saving Recipe...' : 'Save Recipe'}
+              {createMutation.isPending ? 'Adding Recipe...' : 'Add Recipe'}
             </Text>
             {createMutation.isPending && (
-              <ActivityIndicator
-                size="small"
-                color={colors.onPrimary || '#0F2A0F'}
-                style={{ marginLeft: 8 }}
-              />
+              <ActivityIndicator size="small" color="#0F2A0F" style={{ marginLeft: 8 }} />
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </NestableScrollContainer>
       </KeyboardAvoidingView>
 
-      {/* Floating Overlapping Dropdown Menu */}
+      {/* Floating Animated Dropdown Menu (White/Greyish Tone) */}
       <Modal
         visible={isCategoryOpen}
         transparent
@@ -975,55 +962,66 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         />
 
         <Animated.View
-          entering={FadeInDown.duration(180)}
-          exiting={FadeOutUp.duration(120)}
-          style={{
-            position: 'absolute',
-            top: dropdownCoords.y,
-            left: dropdownCoords.x,
-            width: dropdownCoords.width,
-            maxHeight: 220,
-            elevation: 16,
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.16,
-            shadowRadius: 14,
-          }}
-          className="rounded-xl border border-border bg-surface overflow-hidden"
+          entering={dropdownCoords.openUpwards ? FadeInUp.duration(180) : FadeInDown.duration(180)}
+          exiting={dropdownCoords.openUpwards ? FadeOutDown.duration(120) : FadeOutUp.duration(120)}
+          style={[
+            dropdownCoords.openUpwards
+              ? {
+                  position: 'absolute',
+                  bottom: Math.max(windowHeight - dropdownCoords.y + 6, 16),
+                  left: dropdownCoords.x,
+                  width: dropdownCoords.width,
+                  maxHeight: dropdownCoords.maxHeight,
+                }
+              : {
+                  position: 'absolute',
+                  top: dropdownCoords.y + dropdownCoords.height + 6,
+                  left: dropdownCoords.x,
+                  width: dropdownCoords.width,
+                  maxHeight: dropdownCoords.maxHeight,
+                },
+            {
+              elevation: 16,
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: dropdownCoords.openUpwards ? -4 : 6 },
+              shadowOpacity: 0.12,
+              shadowRadius: 14,
+            },
+          ]}
+          className="rounded-[16px] border border-neutral-200/90 bg-white overflow-hidden"
         >
           <ScrollView
-            style={{ maxHeight: 220 }}
+            style={{ maxHeight: dropdownCoords.maxHeight }}
             showsVerticalScrollIndicator={true}
-            bounces={true}
+            bounces={false}
             nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
           >
             {CATEGORY_OPTIONS.map((item, index) => {
               const isSelected = category === item.value;
               const isLast = index === CATEGORY_OPTIONS.length - 1;
+
               return (
                 <TouchableOpacity
                   key={item.value}
                   activeOpacity={0.7}
                   onPress={() => handleSelectCategory(item.value)}
                   className={`px-4 py-3 flex-row items-center justify-between ${
-                    isSelected ? 'bg-primary-tint/60' : 'bg-surface'
-                  } ${!isLast ? 'border-b border-border/40' : ''}`}
+                    isSelected ? 'bg-[#F1F5F9]' : 'bg-white active:bg-neutral-50'
+                  } ${!isLast ? 'border-b border-neutral-100' : ''}`}
                 >
                   <View className="flex-1 mr-2">
                     <Text
                       style={{
-                        fontFamily: isSelected ? fonts.semiBold : fonts.medium,
+                        fontFamily: isSelected ? fonts.bold : fonts.medium,
                       }}
-                      className={`text-sm ${
-                        isSelected ? 'text-primary-dark' : 'text-text-primary'
-                      }`}
+                      className="text-[14.5px] text-neutral-900"
                     >
                       {item.label}
                     </Text>
                     <Text
-                      style={{ fontFamily: fonts.regular }}
-                      className="text-[11px] text-text-secondary mt-0.5"
+                      style={{ fontFamily: fonts.medium }}
+                      className="text-[11.5px] text-neutral-400 mt-0.5"
                     >
                       {item.description}
                     </Text>
@@ -1031,9 +1029,9 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
                   {isSelected && (
                     <Ionicons
-                      name="checkmark"
-                      size={18}
-                      color={colors.primaryDark}
+                      name="checkmark-circle"
+                      size={19}
+                      color="#32CD32"
                     />
                   )}
                 </TouchableOpacity>
@@ -1043,5 +1041,78 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         </Animated.View>
       </Modal>
     </Animated.View>
+  </GestureHandlerRootView>
   );
 };
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    minHeight: 48,
+  },
+  rowContainerActive: {
+    borderColor: '#475569',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  dragHandle: {
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowInput: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14.5,
+    color: '#0F172A',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  rowInputMultiline: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14.5,
+    color: '#0F172A',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    minHeight: 48,
+  },
+  removeButton: {
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  stepNumber: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: '#475569',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
+});
