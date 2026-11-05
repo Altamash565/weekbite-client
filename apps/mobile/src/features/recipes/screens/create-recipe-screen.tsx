@@ -40,9 +40,27 @@ import {
   ScaleDecorator,
 } from '../../../shared/components/draggable-list';
 import { useCreateRecipe } from '../hooks/useRecipes';
-import { RecipeCategory } from '../types/recipes.types';
+import { createRecipeSchema, RecipeCategory } from '../types/recipes.types';
 import { fonts } from '../../../shared/theme/tokens';
 import { toast } from '../../../shared/services/toast';
+
+interface InputErrorMessageProps {
+  message?: string;
+  visible?: boolean;
+}
+
+const InputErrorMessage: React.FC<InputErrorMessageProps> = ({
+  message,
+  visible = true,
+}) => {
+  if (!visible || !message) return null;
+  return (
+    <View style={styles.errorRow}>
+      <Ionicons name="alert-circle" size={14} color="#DC2626" />
+      <Text style={styles.errorText}>{message}</Text>
+    </View>
+  );
+};
 
 export interface DraggableItem {
   id: string;
@@ -131,6 +149,11 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const createMutation = useCreateRecipe();
+  const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const prepHoursInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const prepMinutesInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const cookHoursInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const cookMinutesInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
 
   // Entrance & Exit Transition Animation
   const translateX = useSharedValue(28);
@@ -182,7 +205,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     transform: [{ translateX: translateX.value }],
   }));
 
-  // Form Fields State matching reference design
+  // Form Fields State matching reference design & backend DTO
   const [title, setTitle] = useState('');
   const [image, setImage] = useState('');
   const [description, setDescription] = useState('');
@@ -198,6 +221,47 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
   const [cookHours, setCookHours] = useState('');
   const [cookMinutes, setCookMinutes] = useState('');
   const [category, setCategory] = useState<RecipeCategory>('DINNER');
+
+  // Touched state to reveal errors after interaction or submission attempt
+  const [touched, setTouched] = useState<{
+    title?: boolean;
+    description?: boolean;
+    servings?: boolean;
+    prepHours?: boolean;
+    prepMinutes?: boolean;
+    cookHours?: boolean;
+    cookMinutes?: boolean;
+    ingredients?: Record<string, boolean>;
+    instructions?: Record<string, boolean>;
+  }>({});
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+
+  const markTouched = (
+    field:
+      | 'title'
+      | 'description'
+      | 'servings'
+      | 'prepHours'
+      | 'prepMinutes'
+      | 'cookHours'
+      | 'cookMinutes'
+  ) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const markIngredientTouched = (id: string) => {
+    setTouched((prev) => ({
+      ...prev,
+      ingredients: { ...prev.ingredients, [id]: true },
+    }));
+  };
+
+  const markInstructionTouched = (id: string) => {
+    setTouched((prev) => ({
+      ...prev,
+      instructions: { ...prev.instructions, [id]: true },
+    }));
+  };
 
   // Ingredient List Handlers
   const handleAddIngredient = () => {
@@ -278,6 +342,149 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
       prev.map((item) => (item.id === id ? { ...item, text } : item))
     );
   };
+
+  // -------------------------------------------------------------
+  // Dynamic Real-Time Form Validation (Rules based on Postman & Zod)
+  // -------------------------------------------------------------
+
+  // 1. Title: required, min 3, max 100
+  const trimmedTitle = title.trim();
+  let titleError: string | undefined;
+  if (!trimmedTitle) {
+    titleError = 'Title is required (minimum 3 characters)';
+  } else if (trimmedTitle.length < 3) {
+    titleError = 'Title must be at least 3 characters long';
+  } else if (trimmedTitle.length > 100) {
+    titleError = 'Title cannot exceed 100 characters';
+  }
+
+  // 2. Description: optional, max 500
+  let descriptionError: string | undefined;
+  if (description.trim().length > 500) {
+    descriptionError = 'Description cannot exceed 500 characters';
+  }
+
+  // 3. Servings: required integer >= 1
+  const trimmedServings = servings.trim();
+  let servingsError: string | undefined;
+  if (!trimmedServings) {
+    servingsError = 'Servings is required (e.g. 2 or 4)';
+  } else if (!/^\d+$/.test(trimmedServings)) {
+    servingsError = 'Servings must be a positive whole number';
+  } else {
+    const numServings = parseInt(trimmedServings, 10);
+    if (numServings < 1) {
+      servingsError = 'Servings must be at least 1';
+    } else if (numServings > 1000) {
+      servingsError = 'Servings cannot exceed 1,000';
+    }
+  }
+
+  // 4. Prep Time: non-negative integer, minutes 0-59
+  const trimmedPrepHours = prepHours.trim();
+  const trimmedPrepMins = prepMinutes.trim();
+  let prepTimeError: string | undefined;
+  let prepHoursHasError = false;
+  let prepMinutesHasError = false;
+
+  if (trimmedPrepHours && !/^\d+$/.test(trimmedPrepHours)) {
+    prepTimeError = 'Prep hours must be a whole number';
+    prepHoursHasError = true;
+  } else if (trimmedPrepMins && !/^\d+$/.test(trimmedPrepMins)) {
+    prepTimeError = 'Prep minutes must be a whole number';
+    prepMinutesHasError = true;
+  } else if (trimmedPrepMins && parseInt(trimmedPrepMins, 10) > 1440) {
+    prepTimeError = 'Prep minutes cannot exceed 1,440 (24h)';
+    prepMinutesHasError = true;
+  }
+
+  // 5. Cook Time: non-negative integers
+  const trimmedCookHours = cookHours.trim();
+  const trimmedCookMins = cookMinutes.trim();
+  let cookTimeError: string | undefined;
+  let cookHoursHasError = false;
+  let cookMinutesHasError = false;
+
+  if (trimmedCookHours && !/^\d+$/.test(trimmedCookHours)) {
+    cookTimeError = 'Cook hours must be a whole number';
+    cookHoursHasError = true;
+  } else if (trimmedCookMins && !/^\d+$/.test(trimmedCookMins)) {
+    cookTimeError = 'Cook minutes must be a whole number';
+    cookMinutesHasError = true;
+  } else if (trimmedCookMins && parseInt(trimmedCookMins, 10) > 1440) {
+    cookTimeError = 'Cook minutes cannot exceed 1,440 (24h)';
+    cookMinutesHasError = true;
+  }
+
+  // 6. Ingredients: at least 1 non-empty, and flag empty rows
+  const parsedIngredients = ingredients
+    .map((item) => ({ item, parsed: parseIngredientLine(item.text) }))
+    .filter((entry): entry is { item: DraggableItem; parsed: { name: string; quantity: string } } =>
+      Boolean(entry.parsed && entry.parsed.name)
+    );
+
+  const emptyIngredientIds = new Set(
+    ingredients
+      .filter((item) => !item.text.trim())
+      .map((item) => item.id)
+  );
+
+  let ingredientsError: string | undefined;
+  if (parsedIngredients.length === 0) {
+    ingredientsError = 'At least one ingredient with a quantity is required (e.g. "2 cups flour")';
+  } else if (emptyIngredientIds.size > 0 && ingredients.length > 1) {
+    ingredientsError = 'Please fill in or remove empty ingredient rows';
+  }
+
+  // 7. Instructions: at least 1 non-empty, combined length >= 10, flag empty steps
+  const validInstructions = instructions
+    .map((item) => item.text.trim())
+    .filter(Boolean);
+
+  const emptyInstructionIds = new Set(
+    instructions
+      .filter((item) => !item.text.trim())
+      .map((item) => item.id)
+  );
+
+  const combinedInstructions = validInstructions.join('\n');
+  let instructionsError: string | undefined;
+  if (validInstructions.length === 0) {
+    instructionsError = 'At least one instruction step is required';
+  } else if (combinedInstructions.length < 10) {
+    instructionsError = `Instructions must be at least 10 characters long (${combinedInstructions.length}/10)`;
+  } else if (emptyInstructionIds.size > 0 && instructions.length > 1) {
+    instructionsError = 'Please fill in or remove empty step rows';
+  }
+
+  // Determine which field errors should be visible based on blur or submit attempt
+  const showTitleError = (hasAttemptedSubmit || touched.title) && Boolean(titleError);
+  const showDescriptionError =
+    (hasAttemptedSubmit || touched.description) && Boolean(descriptionError);
+  const showServingsError =
+    (hasAttemptedSubmit || touched.servings) && Boolean(servingsError);
+  const showPrepTimeError =
+    (hasAttemptedSubmit || touched.prepHours || touched.prepMinutes) &&
+    Boolean(prepTimeError);
+  const showCookTimeError =
+    (hasAttemptedSubmit || touched.cookHours || touched.cookMinutes) &&
+    Boolean(cookTimeError);
+  const showIngredientsError =
+    (hasAttemptedSubmit || Object.keys(touched.ingredients || {}).length > 0) &&
+    Boolean(ingredientsError);
+  const showInstructionsError =
+    (hasAttemptedSubmit || Object.keys(touched.instructions || {}).length > 0) &&
+    Boolean(instructionsError);
+
+  const hasAnyFormError = Boolean(
+    titleError ||
+      descriptionError ||
+      servingsError ||
+      prepTimeError ||
+      cookTimeError ||
+      ingredientsError ||
+      instructionsError
+  );
 
   // Category Selector Dropdown State & Coordinates
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
@@ -416,33 +623,16 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     ]);
   };
 
-  // Submit Handler with Clean Validation Toasts
+  // Submit Handler with Comprehensive Validation & Zod Schema Enforcement
   const handleSubmit = () => {
-    if (!title.trim() || title.trim().length < 3) {
-      toast.warning('Title Required', 'Title must be at least 3 characters.');
-      return;
-    }
+    Keyboard.dismiss();
+    setHasAttemptedSubmit(true);
 
-    const parsedIngredients = ingredients
-      .map((item) => parseIngredientLine(item.text))
-      .filter((item): item is { name: string; quantity: string } => Boolean(item && item.name));
-
-    if (parsedIngredients.length === 0) {
+    if (hasAnyFormError) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       toast.warning(
-        'Missing Ingredients',
-        'Please enter at least one ingredient.'
-      );
-      return;
-    }
-
-    const validInstructions = instructions
-      .map((item) => item.text.trim())
-      .filter(Boolean);
-
-    if (validInstructions.length === 0 || validInstructions.join('\n').length < 10) {
-      toast.warning(
-        'Instructions Needed',
-        'Instructions must be at least 10 characters.'
+        'Check Recipe Details',
+        'Please correct the highlighted errors before saving your recipe.'
       );
       return;
     }
@@ -453,28 +643,35 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
       (parseInt(cookHours, 10) || 0) * 60 + (parseInt(cookMinutes, 10) || 0);
     const parsedServings = parseInt(servings, 10) || 1;
 
-    createMutation.mutate(
-      {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        image: image.trim() || undefined,
-        category,
-        prepTime: totalPrepMinutes,
-        cookTime: totalCookMinutes,
-        servings: parsedServings,
-        instructions: validInstructions.join('\n'),
-        ingredients: parsedIngredients,
+    const payload = {
+      title: trimmedTitle,
+      description: description.trim() || undefined,
+      image: image.trim() || undefined,
+      category,
+      prepTime: totalPrepMinutes,
+      cookTime: totalCookMinutes,
+      servings: parsedServings,
+      instructions: combinedInstructions,
+      ingredients: parsedIngredients.map((p) => p.parsed),
+    };
+
+    // Strict validation against Zod schema matching Postman collection
+    const parseResult = createRecipeSchema.safeParse(payload);
+    if (!parseResult.success) {
+      const issue = parseResult.error.issues[0];
+      toast.error('Validation Error', issue?.message || 'Invalid form data.');
+      return;
+    }
+
+    createMutation.mutate(payload, {
+      onSuccess: () => {
+        toast.success('Recipe Added', 'Your recipe has been saved to your collection.');
+        handleBack();
       },
-      {
-        onSuccess: () => {
-          toast.success('Recipe Added', 'Your recipe has been saved to your collection.');
-          handleBack();
-        },
-        onError: (err) => {
-          toast.error('Save Failed', err.message || 'Please check your connection and try again.');
-        },
-      }
-    );
+      onError: (err) => {
+        toast.error('Save Failed', err.message || 'Please check your connection and try again.');
+      },
+    });
   };
 
   // Draggable Row Renderers
@@ -485,12 +682,17 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     DragHandle,
   }: RenderItemParams<DraggableItem>) => {
     const index = typeof getIndex === 'function' ? (getIndex() ?? 0) : 0;
+    const isRowEmpty = !item.text.trim();
+    const isRowTouched = hasAttemptedSubmit || Boolean(touched.ingredients?.[item.id]);
+    const showRowError = isRowTouched && isRowEmpty;
+
     return (
       <ScaleDecorator activeScale={1.04}>
         <View
           style={[
             styles.rowContainer,
             isActive && styles.rowContainerActive,
+            showRowError && styles.rowContainerError,
           ]}
         >
           {/* Handle-Only Activation: 6-dot handle icon with instant drag */}
@@ -501,7 +703,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
             <MaterialIcons
               name="drag-indicator"
               size={22}
-              color={isActive ? '#0F172A' : '#94A3B8'}
+              color={isActive ? '#0F172A' : showRowError ? '#EF4444' : '#94A3B8'}
             />
           </DragHandle>
 
@@ -509,6 +711,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
           <TextInput
             value={item.text}
             onChangeText={(text) => handleUpdateIngredient(item.id, text)}
+            onBlur={() => markIngredientTouched(item.id)}
             placeholder={index === 0 ? 'e.g. 2 cups all-purpose flour' : 'Ingredient'}
             placeholderTextColor="#94A3B8"
             style={styles.rowInput}
@@ -521,7 +724,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.removeButton}
             >
-              <Ionicons name="close" size={18} color="#94A3B8" />
+              <Ionicons name="close" size={18} color={showRowError ? '#EF4444' : '#94A3B8'} />
             </TouchableOpacity>
           )}
         </View>
@@ -536,12 +739,17 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
     DragHandle,
   }: RenderItemParams<DraggableItem>) => {
     const index = typeof getIndex === 'function' ? (getIndex() ?? 0) : 0;
+    const isStepEmpty = !item.text.trim();
+    const isStepTouched = hasAttemptedSubmit || Boolean(touched.instructions?.[item.id]);
+    const showStepError = isStepTouched && isStepEmpty;
+
     return (
       <ScaleDecorator activeScale={1.04}>
         <View
           style={[
             styles.rowContainer,
             isActive && styles.rowContainerActive,
+            showStepError && styles.rowContainerError,
           ]}
         >
           {/* Handle-Only Activation: 6-dot handle icon with instant drag */}
@@ -552,13 +760,13 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
             <MaterialIcons
               name="drag-indicator"
               size={22}
-              color={isActive ? '#0F172A' : '#94A3B8'}
+              color={isActive ? '#0F172A' : showStepError ? '#EF4444' : '#94A3B8'}
             />
           </DragHandle>
 
           {/* Step Number Badge */}
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepNumber}>
+          <View style={[styles.stepBadge, showStepError && styles.stepBadgeError]}>
+            <Text style={[styles.stepNumber, showStepError && styles.stepNumberError]}>
               {index + 1}
             </Text>
           </View>
@@ -567,6 +775,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
           <TextInput
             value={item.text}
             onChangeText={(text) => handleUpdateInstruction(item.id, text)}
+            onBlur={() => markInstructionTouched(item.id)}
             placeholder={index === 0 ? 'e.g. Preheat oven to 375°F (190°C)' : `Step ${index + 1}`}
             placeholderTextColor="#94A3B8"
             multiline
@@ -580,7 +789,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={styles.removeButton}
             >
-              <Ionicons name="close" size={18} color="#94A3B8" />
+              <Ionicons name="close" size={18} color={showStepError ? '#EF4444' : '#94A3B8'} />
             </TouchableOpacity>
           )}
         </View>
@@ -621,35 +830,66 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={Platform.OS === 'ios'}
           className="flex-1 bg-[#F8F9FA]"
         >
           <NestableScrollContainer
+            ref={scrollRef}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingTop: 16,
-              paddingBottom: Math.max(insets.bottom + 24, 40),
+              paddingBottom: Math.max(insets.bottom + 16, 28),
             }}
           >
             {/* Main White Card Container matching reference screenshot */}
             <View className="bg-white rounded-[24px] p-5 border border-neutral-200/60 shadow-sm mb-4">
+              {/* Optional Error Summary Banner on Submit Attempt */}
+              {hasAttemptedSubmit && hasAnyFormError && (
+                <View style={styles.errorSummaryBanner}>
+                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                  <Text style={styles.errorSummaryText}>
+                    Please resolve the highlighted fields below before adding.
+                  </Text>
+                </View>
+              )}
+
               {/* 1. Title* */}
               <View className="mb-5">
-                <Text
-                  style={{ fontFamily: fonts.bold }}
-                  className="text-[15px] text-neutral-900 mb-2"
-                >
-                  Title*
-                </Text>
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text
+                    style={{ fontFamily: fonts.bold }}
+                    className="text-[15px] text-neutral-900"
+                  >
+                    Title*
+                  </Text>
+                  <Text
+                    style={{ fontFamily: fonts.medium }}
+                    className={`text-[12px] ${
+                      trimmedTitle.length > 100
+                        ? 'text-red-600 font-bold'
+                        : 'text-neutral-400'
+                    }`}
+                  >
+                    {trimmedTitle.length}/100
+                  </Text>
+                </View>
                 <TextInput
                   value={title}
                   onChangeText={setTitle}
-                  placeholder="Title"
+                  onBlur={() => markTouched('title')}
+                  placeholder="Title (e.g. Garlic Butter Pasta)"
                   placeholderTextColor="#94A3B8"
-                  style={{ fontFamily: fonts.medium }}
-                  className="h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                  maxLength={120}
+                  style={[
+                    styles.inputField,
+                    showTitleError && styles.inputFieldError,
+                  ]}
                 />
+                <InputErrorMessage message={titleError} visible={showTitleError} />
               </View>
 
               {/* 2. Image Upload Box */}
@@ -712,22 +952,42 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
 
               {/* 3. Description */}
               <View className="mb-5">
-                <Text
-                  style={{ fontFamily: fonts.bold }}
-                  className="text-[15px] text-neutral-900 mb-2"
-                >
-                  Description
-                </Text>
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text
+                    style={{ fontFamily: fonts.bold }}
+                    className="text-[15px] text-neutral-900"
+                  >
+                    Description
+                  </Text>
+                  <Text
+                    style={{ fontFamily: fonts.medium }}
+                    className={`text-[12px] ${
+                      description.length > 500
+                        ? 'text-red-600 font-bold'
+                        : 'text-neutral-400'
+                    }`}
+                  >
+                    {description.length}/500
+                  </Text>
+                </View>
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Description"
+                  onBlur={() => markTouched('description')}
+                  placeholder="Short overview, flavour notes, or tips"
                   placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
-                  style={{ fontFamily: fonts.medium }}
-                  className="min-h-[85px] rounded-[12px] border border-neutral-200 bg-white p-3.5 text-[14.5px] text-neutral-900 leading-snug"
+                  maxLength={600}
+                  style={[
+                    styles.descriptionInput,
+                    showDescriptionError && styles.inputFieldError,
+                  ]}
+                />
+                <InputErrorMessage
+                  message={descriptionError}
+                  visible={showDescriptionError}
                 />
               </View>
 
@@ -737,7 +997,7 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
                   style={{ fontFamily: fonts.bold }}
                   className="text-[15px] text-neutral-900 mb-0.5"
                 >
-                  Ingredients
+                  Ingredients*
                 </Text>
                 <Text
                   style={{ fontFamily: fonts.medium }}
@@ -767,16 +1027,35 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
                     Add ingredient
                   </Text>
                 </TouchableOpacity>
+
+                <InputErrorMessage
+                  message={ingredientsError}
+                  visible={showIngredientsError}
+                />
               </View>
 
               {/* 5. Instructions (Draggable Reorderable List) */}
               <View className="mb-5">
-                <Text
-                  style={{ fontFamily: fonts.bold }}
-                  className="text-[15px] text-neutral-900 mb-0.5"
-                >
-                  Instructions
-                </Text>
+                <View className="flex-row justify-between items-center mb-0.5">
+                  <Text
+                    style={{ fontFamily: fonts.bold }}
+                    className="text-[15px] text-neutral-900"
+                  >
+                    Instructions*
+                  </Text>
+                  <Text
+                    style={{ fontFamily: fonts.medium }}
+                    className={`text-[12px] ${
+                      combinedInstructions.length < 10 &&
+                      (hasAttemptedSubmit ||
+                        Object.keys(touched.instructions || {}).length > 0)
+                        ? 'text-red-600 font-bold'
+                        : 'text-neutral-400'
+                    }`}
+                  >
+                    {combinedInstructions.length} chars (min 10)
+                  </Text>
+                </View>
                 <Text
                   style={{ fontFamily: fonts.medium }}
                   className="text-[12px] text-neutral-400 mb-2.5"
@@ -805,126 +1084,208 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
                     Add step
                   </Text>
                 </TouchableOpacity>
-              </View>
 
-            {/* 6. Servings */}
-            <View className="mb-5">
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-[15px] text-neutral-900 mb-2"
-              >
-                Servings
-              </Text>
-              <TextInput
-                value={servings}
-                onChangeText={setServings}
-                placeholder="Servings"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-                style={{ fontFamily: fonts.medium }}
-                className="h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
-              />
-            </View>
-
-            {/* 7. Prep Time */}
-            <View className="mb-5">
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-[15px] text-neutral-900 mb-2"
-              >
-                Prep Time
-              </Text>
-              <View className="flex-row gap-3">
-                <TextInput
-                  value={prepHours}
-                  onChangeText={setPrepHours}
-                  placeholder="Hours"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
-                />
-                <TextInput
-                  value={prepMinutes}
-                  onChangeText={setPrepMinutes}
-                  placeholder="Minutes"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
+                <InputErrorMessage
+                  message={instructionsError}
+                  visible={showInstructionsError}
                 />
               </View>
-            </View>
 
-            {/* 8. Cook Time */}
-            <View className="mb-5">
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-[15px] text-neutral-900 mb-2"
-              >
-                Cook Time
-              </Text>
-              <View className="flex-row gap-3">
-                <TextInput
-                  value={cookHours}
-                  onChangeText={setCookHours}
-                  placeholder="Hours"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
-                />
-                <TextInput
-                  value={cookMinutes}
-                  onChangeText={setCookMinutes}
-                  placeholder="Minutes"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  style={{ fontFamily: fonts.medium }}
-                  className="flex-1 h-[48px] rounded-[12px] border border-neutral-200 bg-white px-4 text-[14.5px] text-neutral-900"
-                />
-              </View>
-            </View>
-
-            {/* 9. Category Section (Animated Dropdown) */}
-            <View className="mb-1">
-              <Text
-                style={{ fontFamily: fonts.bold }}
-                className="text-[15px] text-neutral-900 mb-2"
-              >
-                Category
-              </Text>
-              <View ref={triggerRef} collapsable={false}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={() => {
-                    if (isCategoryOpen) {
-                      closeCategoryDropdown();
-                    } else {
-                      openCategoryDropdown();
-                    }
-                  }}
-                  className={`w-full h-[48px] rounded-[12px] px-4 flex-row items-center justify-between border bg-white ${
-                    isCategoryOpen ? 'border-neutral-800' : 'border-neutral-200'
-                  }`}
+              {/* 6. Servings */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
                 >
-                  <Text
-                    style={{ fontFamily: fonts.medium }}
-                    className="text-[14.5px] text-neutral-900"
-                  >
-                    {selectedCategoryLabel}
-                  </Text>
-                  <Animated.View style={animatedChevronStyle}>
-                    <Ionicons
-                      name="chevron-down"
-                      size={18}
-                      color={isCategoryOpen ? '#0F172A' : '#64748B'}
+                  Servings*
+                </Text>
+                <TextInput
+                  value={servings}
+                  onChangeText={(val) => {
+                    const digitsOnly = val.replace(/[^0-9]/g, '');
+                    setServings(digitsOnly);
+                  }}
+                  onBlur={() => markTouched('servings')}
+                  placeholder="e.g. 2 or 4"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  returnKeyType="next"
+                  onSubmitEditing={() => prepHoursInputRef.current?.focus()}
+                  style={[
+                    styles.inputField,
+                    showServingsError && styles.inputFieldError,
+                  ]}
+                />
+                <InputErrorMessage
+                  message={servingsError}
+                  visible={showServingsError}
+                />
+              </View>
+
+              {/* 7. Prep Time */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
+                >
+                  Prep Time
+                </Text>
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <TextInput
+                      ref={prepHoursInputRef}
+                      value={prepHours}
+                      onChangeText={(val) => {
+                        const digitsOnly = val.replace(/[^0-9]/g, '');
+                        setPrepHours(digitsOnly);
+                      }}
+                      onBlur={() => markTouched('prepHours')}
+                      placeholder="Hours"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      returnKeyType="next"
+                      onSubmitEditing={() => prepMinutesInputRef.current?.focus()}
+                      style={[
+                        styles.inputField,
+                        prepHoursHasError &&
+                          (hasAttemptedSubmit || touched.prepHours) &&
+                          styles.inputFieldError,
+                      ]}
                     />
-                  </Animated.View>
-                </TouchableOpacity>
+                  </View>
+                  <View className="flex-1">
+                    <TextInput
+                      ref={prepMinutesInputRef}
+                      value={prepMinutes}
+                      onChangeText={(val) => {
+                        const digitsOnly = val.replace(/[^0-9]/g, '');
+                        setPrepMinutes(digitsOnly);
+                      }}
+                      onBlur={() => markTouched('prepMinutes')}
+                      placeholder="Minutes"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      returnKeyType="next"
+                      onSubmitEditing={() => cookHoursInputRef.current?.focus()}
+                      style={[
+                        styles.inputField,
+                        prepMinutesHasError &&
+                          (hasAttemptedSubmit || touched.prepMinutes) &&
+                          styles.inputFieldError,
+                      ]}
+                    />
+                  </View>
+                </View>
+                <InputErrorMessage
+                  message={prepTimeError}
+                  visible={showPrepTimeError}
+                />
+              </View>
+
+              {/* 8. Cook Time */}
+              <View className="mb-5">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
+                >
+                  Cook Time
+                </Text>
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <TextInput
+                      ref={cookHoursInputRef}
+                      value={cookHours}
+                      onChangeText={(val) => {
+                        const digitsOnly = val.replace(/[^0-9]/g, '');
+                        setCookHours(digitsOnly);
+                      }}
+                      onBlur={() => markTouched('cookHours')}
+                      placeholder="Hours"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      returnKeyType="next"
+                      onSubmitEditing={() => cookMinutesInputRef.current?.focus()}
+                      style={[
+                        styles.inputField,
+                        cookHoursHasError &&
+                          (hasAttemptedSubmit || touched.cookHours) &&
+                          styles.inputFieldError,
+                      ]}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <TextInput
+                      ref={cookMinutesInputRef}
+                      value={cookMinutes}
+                      onChangeText={(val) => {
+                        const digitsOnly = val.replace(/[^0-9]/g, '');
+                        setCookMinutes(digitsOnly);
+                      }}
+                      onBlur={() => markTouched('cookMinutes')}
+                      placeholder="Minutes"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      returnKeyType="done"
+                      onSubmitEditing={() => Keyboard.dismiss()}
+                      style={[
+                        styles.inputField,
+                        cookMinutesHasError &&
+                          (hasAttemptedSubmit || touched.cookMinutes) &&
+                          styles.inputFieldError,
+                      ]}
+                    />
+                  </View>
+                </View>
+                <InputErrorMessage
+                  message={cookTimeError}
+                  visible={showCookTimeError}
+                />
+              </View>
+
+              {/* 9. Category Section (Animated Dropdown) */}
+              <View className="mb-1">
+                <Text
+                  style={{ fontFamily: fonts.bold }}
+                  className="text-[15px] text-neutral-900 mb-2"
+                >
+                  Category
+                </Text>
+                <View ref={triggerRef} collapsable={false}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      if (isCategoryOpen) {
+                        closeCategoryDropdown();
+                      } else {
+                        openCategoryDropdown();
+                      }
+                    }}
+                    className={`w-full h-[48px] rounded-[12px] px-4 flex-row items-center justify-between border bg-white ${
+                      isCategoryOpen ? 'border-neutral-800' : 'border-neutral-200'
+                    }`}
+                  >
+                    <Text
+                      style={{ fontFamily: fonts.medium }}
+                      className="text-[14.5px] text-neutral-900"
+                    >
+                      {selectedCategoryLabel}
+                    </Text>
+                    <Animated.View style={animatedChevronStyle}>
+                      <Ionicons
+                        name="chevron-down"
+                        size={18}
+                        color={isCategoryOpen ? '#0F172A' : '#64748B'}
+                      />
+                    </Animated.View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
 
           {/* 10. Bottom "Add Recipe" Button (Outside contents card) */}
           <TouchableOpacity
@@ -1114,5 +1475,73 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textAlignVertical: 'center',
     includeFontPadding: false,
+  },
+  stepBadgeError: {
+    backgroundColor: '#FEE2E2',
+  },
+  stepNumberError: {
+    color: '#DC2626',
+  },
+  inputField: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    fontSize: 14.5,
+    fontFamily: fonts.medium,
+    color: '#0F172A',
+  },
+  descriptionInput: {
+    minHeight: 85,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    fontSize: 14.5,
+    fontFamily: fonts.medium,
+    color: '#0F172A',
+    lineHeight: 20,
+  },
+  inputFieldError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  rowContainerError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  errorText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#DC2626',
+    marginLeft: 5,
+    flexShrink: 1,
+  },
+  errorSummaryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  errorSummaryText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: '#B91C1C',
+    marginLeft: 8,
+    flexShrink: 1,
   },
 });

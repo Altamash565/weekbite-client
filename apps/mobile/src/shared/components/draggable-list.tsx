@@ -54,11 +54,10 @@ const RowGestureContext = createContext<PanGestureType | null>(null);
  * Clean drop-in replacement for NestableScrollContainer.
  * Uses standard React Native ScrollView and locks scrolling while any item is being dragged.
  */
-export const NestableScrollContainer: React.FC<ScrollViewProps> = ({
-  children,
-  scrollEnabled = true,
-  ...rest
-}) => {
+export const NestableScrollContainer = React.forwardRef<
+  React.ElementRef<typeof ScrollView>,
+  ScrollViewProps
+>(({ children, scrollEnabled = true, ...rest }, ref) => {
   const [internalScrollEnabled, setInternalScrollEnabled] = useState(true);
 
   return (
@@ -68,6 +67,7 @@ export const NestableScrollContainer: React.FC<ScrollViewProps> = ({
       }}
     >
       <ScrollView
+        ref={ref}
         scrollEnabled={scrollEnabled && internalScrollEnabled}
         {...rest}
       >
@@ -75,7 +75,8 @@ export const NestableScrollContainer: React.FC<ScrollViewProps> = ({
       </ScrollView>
     </DraggableScrollContext.Provider>
   );
-};
+});
+NestableScrollContainer.displayName = 'NestableScrollContainer';
 
 export interface RenderItemParams<T> {
   item: T;
