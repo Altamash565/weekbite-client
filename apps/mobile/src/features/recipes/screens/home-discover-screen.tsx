@@ -35,6 +35,7 @@ export const HomeDiscoverScreen: React.FC = () => {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [failedImageIds, setFailedImageIds] = useState<Set<string>>(new Set());
 
   const activeCategoryValue = useMemo(() => {
     const found = CATEGORIES.find((c) => c.key === selectedCategory);
@@ -255,11 +256,14 @@ export const HomeDiscoverScreen: React.FC = () => {
                   onPress={() => setSelectedRecipeId(featuredRecipe.id)}
                   className="bg-surface rounded-2xl border border-border overflow-hidden"
                 >
-                  {featuredRecipe.image ? (
+                  {featuredRecipe.image && !failedImageIds.has(featuredRecipe.id) ? (
                     <Image
                       source={{ uri: featuredRecipe.image }}
                       className="w-full h-44 bg-surface-low"
                       resizeMode="cover"
+                      onError={() => {
+                        setFailedImageIds((prev) => new Set(prev).add(featuredRecipe.id));
+                      }}
                     />
                   ) : (
                     <View className="w-full h-36 bg-primary-tint/60 items-center justify-center">
@@ -340,6 +344,19 @@ export const HomeDiscoverScreen: React.FC = () => {
                     onPress={() => setSelectedRecipeId(recipe.id)}
                     className="bg-surface rounded-xl border border-border p-3.5 mb-3 flex-row items-center justify-between"
                   >
+                    {recipe.image && !failedImageIds.has(recipe.id) ? (
+                      <View className="w-16 h-16 rounded-[12px] overflow-hidden bg-surface-low mr-3 border border-border/60">
+                        <Image
+                          source={{ uri: recipe.image }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                          onError={() => {
+                            setFailedImageIds((prev) => new Set(prev).add(recipe.id));
+                          }}
+                        />
+                      </View>
+                    ) : null}
+
                     <View className="flex-1 pr-3">
                       <View className="flex-row items-center mb-1">
                         <View className="bg-primary-tint px-2 py-0.5 rounded mr-2">

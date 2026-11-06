@@ -19,6 +19,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
   onPress,
   onToggleFavorite,
 }) => {
+  const [imageError, setImageError] = React.useState(false);
   const totalTime = recipe.prepTime + recipe.cookTime;
 
   if (layout === 'grid') {
@@ -29,16 +30,17 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
         className="bg-surface rounded-2xl border border-border overflow-hidden mb-3.5 flex-1 mx-1.5"
       >
         {/* Thumbnail with floating badge overlays */}
-        <View className="relative w-full h-36 bg-surface-low">
-          {recipe.image ? (
+        <View className="relative w-full h-36 bg-[#F1F5F9] items-center justify-center">
+          {recipe.image && !imageError ? (
             <Image
               source={{ uri: recipe.image }}
               className="w-full h-full"
               resizeMode="cover"
+              onError={() => setImageError(true)}
             />
           ) : (
-            <View className="w-full h-full bg-primary-tint/50 items-center justify-center">
-              <Ionicons name="restaurant-outline" size={26} color={colors.primaryDark} />
+            <View className="w-full h-full bg-[#F1F5F9] items-center justify-center">
+              <Ionicons name="restaurant-outline" size={26} color="#94A3B8" />
             </View>
           )}
 
@@ -99,17 +101,16 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
       className="bg-surface rounded-2xl border border-border p-3.5 mb-3 flex-row items-center"
     >
       {/* Thumbnail */}
-      <View className="w-20 h-20 rounded-xl overflow-hidden bg-surface-low mr-3 relative">
-        {recipe.image ? (
+      <View className="w-20 h-20 rounded-xl overflow-hidden bg-[#F1F5F9] mr-3 relative items-center justify-center border border-neutral-200/50">
+        {recipe.image && !imageError ? (
           <Image
             source={{ uri: recipe.image }}
             className="w-full h-full"
             resizeMode="cover"
+            onError={() => setImageError(true)}
           />
         ) : (
-          <View className="w-full h-full bg-primary-tint/50 items-center justify-center">
-            <Ionicons name="restaurant-outline" size={22} color={colors.primaryDark} />
-          </View>
+          <Ionicons name="restaurant-outline" size={22} color="#94A3B8" />
         )}
       </View>
 

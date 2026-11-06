@@ -570,11 +570,16 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.6,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        const formattedUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+        setImage(formattedUri);
       }
     } catch {
       toast.error('Gallery Error', 'Could not open photo gallery.');
@@ -595,11 +600,16 @@ export const CreateRecipeScreen: React.FC<CreateRecipeScreenProps> = ({ onBack }
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.6,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        const formattedUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+        setImage(formattedUri);
       }
     } catch {
       toast.error('Camera Error', 'Could not open camera.');
